@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Auto Delivery
 
-## Getting Started
+卡密自动发货系统。用户无需登录，输入卡密后领取文本货物或一次性下载文件 ZIP；管理员在后台管理货物、卡密和日志。
 
-First, run the development server:
+## Local Setup
+
+1. Copy environment variables:
+
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and set strong values:
+
+```env
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="replace-with-a-long-password"
+SECRET_PEPPER="replace-with-at-least-32-random-bytes"
+```
+
+3. Start PostgreSQL:
+
+```bash
+docker compose up -d postgres postgres-test
+```
+
+4. Generate Prisma Client and apply migrations:
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+DATABASE_URL="postgresql://auto_delivery:auto_delivery@localhost:5433/auto_delivery_test?schema=public" npx prisma migrate deploy
+```
+
+5. Create the first administrator:
+
+```bash
+npm run init:admin
+```
+
+6. Start development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Public page: `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Admin page: `http://localhost:3000/admin`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Daily Commands
 
-## Learn More
+```bash
+npm run test
+npm run lint
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Manual V1 Checklist
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Log in at `/admin`.
+2. Create file goods named `cpa文件`.
+3. Upload 100 `.json` files.
+4. Confirm inventory shows total `100` and available `100`.
+5. Generate one card key with file quantity `10` and expiration `3天`.
+6. Confirm available inventory changes to `90` and reserved inventory changes to `10`.
+7. Redeem the card key from `/`.
+8. Open the receipt page and download the ZIP once.
+9. Confirm the ZIP contains 10 files.
+10. Try downloading again and confirm the second attempt is rejected.
+11. Check `/admin/logs` for redemption IP and download IP.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Production Notes
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Keep `.env` out of Git.
+- Use a long random `SECRET_PEPPER`; changing it invalidates existing card-key and receipt-token hashes.
+- Use HTTPS in production so secure cookies work correctly.
+- Back up PostgreSQL volume and `app-data` volume together.
+- Do not manually delete generated ZIP files unless the corresponding database records are intentionally archived.
+- Initial storage is local disk through Docker volumes. Move to object storage only when file size or migration needs justify it.
