@@ -6,3 +6,200 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum GoodsType {
+  TEXT
+  FILE
+}
+
+enum GoodsStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum GoodsFileStatus {
+  AVAILABLE
+  RESERVED
+  REDEEMED
+  DELETED
+}
+
+enum CardKeyStatus {
+  ACTIVE
+  REDEEMED
+  EXPIRED
+  DELETED
+}
+
+enum DownloadResult {
+  SUCCESS
+  ALREADY_DOWNLOADED
+  NOT_FOUND
+  ERROR
+}
+
+model AdminUser {
+  id           String          @id @default(cuid())
+  username     String          @unique
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  lastLoginAt  DateTime?
+  sessions     AdminSession[]
+  auditLogs    AdminAuditLog[]
+}
+
+model AdminSession {
+  id            String    @id @default(cuid())
+  tokenHash     String    @unique
+  csrfTokenHash String?
+  adminUserId   String
+  ipAddress     String
+  userAgent     String
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  adminUser     AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([expiresAt])
+}
+
+model Goods {
+  id          String       @id @default(cuid())
+  name        String
+  type        GoodsType
+  textContent String?
+  status      GoodsStatus  @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  files       GoodsFile[]
+  cardKeys    CardKey[]
+  redemptions Redemption[]
+
+  @@index([type, status])
+}
+
+model GoodsFile {
+  id                       String           @id @default(cuid())
+  goodsId                  String
+  originalName             String
+  storedName               String
+  storagePath              String
+  sizeBytes                Int
+  mimeType                 String
+  sha256                   String
+  status                   GoodsFileStatus  @default(AVAILABLE)
+  reservedByCardKeyId      String?
+  redeemedByRedemptionId   String?
+  createdAt                DateTime         @default(now())
+  reservedAt               DateTime?
+  redeemedAt               DateTime?
+  goods                    Goods            @relation(fields: [goodsId], references: [id], onDelete: Cascade)
+  reservedByCardKey        CardKey?         @relation("ReservedFiles", fields: [reservedByCardKeyId], references: [id], onDelete: SetNull)
+  redeemedByRedemption     Redemption?      @relation("RedeemedGoodsFiles", fields: [redeemedByRedemptionId], references: [id], onDelete: SetNull)
+  redemptionFileReferences RedemptionFile[]
+
+  @@index([goodsId, status])
+  @@index([reservedByCardKeyId])
+  @@index([redeemedByRedemptionId])
+}
+
+model CardKey {
+  id            String        @id @default(cuid())
+  keyHash       String        @unique
+  keyMask       String
+  goodsId       String
+  goodsType     GoodsType
+  fileQuantity  Int           @default(0)
+  expiresAt     DateTime?
+  status        CardKeyStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  redeemedAt    DateTime?
+  deletedAt     DateTime?
+  goods         Goods         @relation(fields: [goodsId], references: [id], onDelete: Restrict)
+  reservedFiles GoodsFile[]   @relation("ReservedFiles")
+  redemption    Redemption?
+
+  @@index([goodsId, status])
+  @@index([expiresAt])
+}
+
+model Redemption {
+  id                 String           @id @default(cuid())
+  cardKeyId          String           @unique
+  goodsId            String
+  receiptTokenHash   String           @unique
+  receiptTokenMask   String
+  ipAddress          String
+  userAgent          String
+  redeemedAt         DateTime         @default(now())
+  zipPath            String?
+  zipSizeBytes       Int?
+  downloadCount      Int              @default(0)
+  firstDownloadedAt  DateTime?
+  cardKey            CardKey          @relation(fields: [cardKeyId], references: [id], onDelete: Restrict)
+  goods              Goods            @relation(fields: [goodsId], references: [id], onDelete: Restrict)
+  files              RedemptionFile[]
+  redeemedGoodsFiles GoodsFile[]      @relation("RedeemedGoodsFiles")
+  downloadLogs       DownloadLog[]
+
+  @@index([goodsId, redeemedAt])
+}
+
+model RedemptionFile {
+  id           String     @id @default(cuid())
+  redemptionId String
+  goodsFileId  String
+  originalName String
+  createdAt    DateTime   @default(now())
+  redemption   Redemption @relation(fields: [redemptionId], references: [id], onDelete: Cascade)
+  goodsFile    GoodsFile  @relation(fields: [goodsFileId], references: [id], onDelete: Restrict)
+
+  @@unique([redemptionId, goodsFileId])
+  @@index([goodsFileId])
+}
+
+model DownloadLog {
+  id               String         @id @default(cuid())
+  redemptionId     String?
+  receiptTokenHash String?
+  ipAddress        String
+  userAgent        String
+  result           DownloadResult
+  createdAt        DateTime       @default(now())
+  redemption       Redemption?    @relation(fields: [redemptionId], references: [id], onDelete: SetNull)
+
+  @@index([redemptionId, createdAt])
+  @@index([receiptTokenHash])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id           String     @id @default(cuid())
+  adminUserId  String?
+  action       String
+  entityType   String
+  entityId     String?
+  ipAddress    String
+  userAgent    String
+  metadataJson Json?
+  createdAt    DateTime   @default(now())
+  adminUser    AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model RateLimitBucket {
+  id          String   @id @default(cuid())
+  scope       String
+  identifier  String
+  windowStart DateTime
+  count       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([scope, identifier, windowStart])
+  @@index([windowStart])
+}
