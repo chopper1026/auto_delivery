@@ -1,36 +1,83 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Archive, Boxes, ClipboardList, LayoutDashboard, LogOut, PackageCheck } from "lucide-react";
+import { motion } from "motion/react";
 
 const items = [
-  { href: "/admin", label: "概览" },
-  { href: "/admin/goods", label: "货物管理" },
-  { href: "/admin/cards", label: "卡密管理" },
-  { href: "/admin/logs", label: "日志" },
+  { href: "/admin", label: "工作台", icon: LayoutDashboard },
+  { href: "/admin/goods", label: "库存管理", icon: Boxes },
+  { href: "/admin/cards", label: "卡密管理", icon: Archive },
+  { href: "/admin/logs", label: "交付日志", icon: ClipboardList },
 ];
 
+function isActive(pathname: string, href: string) {
+  if (href === "/admin") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AdminNav() {
+  const pathname = usePathname();
+
   return (
-    <aside className="border-b border-slate-800 bg-slate-950/90 px-6 py-4 backdrop-blur md:min-h-screen md:w-64 md:border-b-0 md:border-r">
-      <Link href="/admin" className="block">
-        <p className="text-xs font-semibold uppercase tracking-[0.38em] text-cyan-300">Auto Delivery</p>
-        <h1 className="mt-2 text-xl font-black tracking-tight text-white">管理后台</h1>
-      </Link>
-      <nav className="mt-6 flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="rounded-xl px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-900 hover:text-white"
-          >
-            {item.label}
-          </Link>
-        ))}
+    <aside className="z-30 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-5">
+      <div className="flex items-center justify-between gap-4 lg:block">
+        <Link href="/admin" prefetch={false} className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--ink)] text-[var(--primary-foreground)]">
+            <PackageCheck className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="brand-script text-lg font-bold leading-5 text-[var(--primary)]">AutoDelivery</p>
+            <h1 className="text-base font-semibold text-[var(--ink)]">管理控制台</h1>
+          </div>
+        </Link>
         <Link
           href="/admin/logout"
-          className="rounded-xl px-3 py-2 text-sm font-medium text-amber-200 transition hover:bg-amber-400/10"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)] lg:hidden"
+          aria-label="退出登录"
         >
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
+
+      <nav className="mt-3 flex gap-1 overflow-x-auto pb-1 lg:mt-8 lg:flex-col lg:overflow-visible lg:pb-0">
+        {items.map((item) => {
+          const active = isActive(pathname, item.href);
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              prefetch={false}
+              className={`relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                active ? "text-[var(--ink)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]"
+              }`}
+            >
+              {active ? (
+                <motion.span
+                  layoutId="admin-nav-active"
+                  className="absolute inset-0 rounded-lg bg-[var(--primary-soft)]"
+                  transition={{ duration: 0.18 }}
+                />
+              ) : null}
+              <Icon className="relative h-4 w-4" aria-hidden="true" />
+              <span className="relative">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="mt-auto hidden pt-8 lg:block">
+        <Link
+          href="/admin/logout"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]"
+        >
+          <LogOut className="h-4 w-4" aria-hidden="true" />
           退出登录
         </Link>
-      </nav>
+      </div>
     </aside>
   );
 }

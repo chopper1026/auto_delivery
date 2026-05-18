@@ -28,17 +28,20 @@ export async function redeemAction(_previousState: RedeemState, formData: FormDa
     return { error: "请输入卡密。" };
   }
 
+  let receiptToken: string;
   try {
     const redeemed = await redeemCardKey({
       plaintextKey: cardKey,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
-    redirect(`/receipt/${redeemed.receiptToken}`);
+    receiptToken = redeemed.receiptToken;
   } catch (error) {
     if (error instanceof CardKeyNotRedeemableError) {
       return { error: "卡密无效、已过期或已兑换。" };
     }
     return { error: "兑换失败，请稍后再试。" };
   }
+
+  redirect(`/receipt/${receiptToken}`);
 }

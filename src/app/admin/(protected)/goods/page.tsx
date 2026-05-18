@@ -1,103 +1,92 @@
+import { Archive, CirclePlay, FileText, PauseCircle, Upload } from "lucide-react";
+import { NewGoodsDialog } from "@/components/admin/new-goods-dialog";
+import { AdminPagination } from "@/components/admin/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { requireAdminSession } from "@/lib/admin/auth";
+import { formatGoodsStatus, formatGoodsType } from "@/lib/display-labels";
+import { countGoods, listGoodsWithInventory } from "@/lib/goods/service";
+import { getPagination, parsePageParam } from "@/lib/pagination";
 import { rotateCsrfToken } from "@/lib/security/csrf";
-import { listGoodsWithInventory } from "@/lib/goods/service";
-import { createFileGoodsAction, createTextGoodsAction, disableGoodsAction, uploadGoodsFilesAction } from "./actions";
+import { disableGoodsAction, enableGoodsAction, uploadGoodsFilesAction } from "./actions";
 
-export default async function AdminGoodsPage() {
+export default async function AdminGoodsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string | string[] }>;
+}) {
+  const params = await searchParams;
   const { token } = await requireAdminSession();
   const csrfToken = await rotateCsrfToken(token);
-  const goods = await listGoodsWithInventory();
+  const totalGoods = await countGoods();
+  const pagination = getPagination({ page: parsePageParam(params.page), totalItems: totalGoods });
+  const goods = await listGoodsWithInventory({ skip: pagination.skip, take: pagination.pageSize });
 
   return (
-    <div className="space-y-8">
-      <div>
-        <p className="text-sm uppercase tracking-[0.36em] text-cyan-300">Goods</p>
-        <h2 className="mt-2 text-3xl font-black tracking-tight">货物管理</h2>
-      </div>
+    <div className="space-y-5">
+      <header className="flex flex-col gap-3 border-b border-[var(--line)] pb-5 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--ink)]">库存管理</h2>
+        </div>
+        <NewGoodsDialog csrfToken={csrfToken} />
+      </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>添加文本货物</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createTextGoodsAction} className="space-y-4">
-              <input type="hidden" name="csrfToken" value={csrfToken} />
-              <div className="space-y-2">
-                <Label htmlFor="text-name">货物名称</Label>
-                <Input id="text-name" name="name" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="text-content">文本内容</Label>
-                <Textarea id="text-content" name="textContent" required />
-              </div>
-              <Button type="submit">添加文本货物</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>添加文件货物</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createFileGoodsAction} className="space-y-4">
-              <input type="hidden" name="csrfToken" value={csrfToken} />
-              <div className="space-y-2">
-                <Label htmlFor="file-name">货物名称</Label>
-                <Input id="file-name" name="name" placeholder="例如：cpa文件" required />
-              </div>
-              <Button type="submit">添加文件货物</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>货物列表</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>库存</TableHead>
-                <TableHead>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {goods.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium text-white">{item.name}</TableCell>
-                  <TableCell>{item.type === "TEXT" ? "文本" : "文件"}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === "ACTIVE" ? "default" : "secondary"}>
-                      {item.status === "ACTIVE" ? "启用" : "停用"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {item.type === "FILE"
-                      ? `总数 ${item.inventory.total} / 可用 ${item.inventory.available} / 预占 ${item.inventory.reserved} / 已兑 ${item.inventory.redeemed}`
-                      : "文本货物"}
-                  </TableCell>
-                  <TableCell className="space-y-3">
+      <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
+          <div>
+            <h3 className="font-semibold text-[var(--ink)]">库存工作区</h3>
+            <p className="mt-1 text-sm text-[var(--muted)]">文件货物可在行内上传 JSON，货物可按状态启用或停用。</p>
+          </div>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>货物</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>库存</TableHead>
+              <TableHead className="min-w-64">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {goods.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted-strong)]">
+                      {item.type === "TEXT" ? <FileText className="h-4 w-4" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
+                    </span>
+                    <span className="font-medium text-[var(--ink)]">{item.name}</span>
+                  </div>
+                </TableCell>
+                <TableCell>{formatGoodsType(item.type)}</TableCell>
+                <TableCell>
+                  <Badge variant={item.status === "ACTIVE" ? "default" : "secondary"}>{formatGoodsStatus(item.status)}</Badge>
+                </TableCell>
+                <TableCell>
+                  {item.type === "FILE" ? (
+                    <div className="flex flex-wrap gap-1.5 text-xs">
+                      <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1">总 {item.inventory.total}</span>
+                      <span className="rounded-md bg-[var(--primary-soft)] px-2 py-1 text-[var(--primary)]">可用 {item.inventory.available}</span>
+                      <span className="rounded-md bg-[var(--accent)]/35 px-2 py-1 text-[var(--accent-ink)]">预占 {item.inventory.reserved}</span>
+                      <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1">已兑 {item.inventory.redeemed}</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-[var(--muted)]">文本内容</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                     {item.type === "FILE" ? (
-                      <form action={uploadGoodsFilesAction} className="flex flex-col gap-2">
+                      <form action={uploadGoodsFilesAction} className="flex shrink-0 items-center gap-2">
                         <input type="hidden" name="csrfToken" value={csrfToken} />
                         <input type="hidden" name="goodsId" value={item.id} />
-                        <Input name="files" type="file" accept=".json,application/json" multiple required />
+                        <Input name="files" type="file" accept=".json,application/json" multiple required className="w-56 min-w-0 max-w-full" />
                         <Button type="submit" variant="outline" size="sm">
-                          上传 JSON
+                          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                          上传
                         </Button>
                       </form>
                     ) : null}
@@ -105,25 +94,42 @@ export default async function AdminGoodsPage() {
                       <form action={disableGoodsAction}>
                         <input type="hidden" name="csrfToken" value={csrfToken} />
                         <input type="hidden" name="goodsId" value={item.id} />
-                        <Button type="submit" variant="ghost" size="sm">
+                        <Button type="submit" variant="outline" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-soft)]">
+                          <PauseCircle className="h-3.5 w-3.5" aria-hidden="true" />
                           停用
                         </Button>
                       </form>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {goods.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-slate-500">
-                    还没有货物。
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                    ) : (
+                      <form action={enableGoodsAction}>
+                        <input type="hidden" name="csrfToken" value={csrfToken} />
+                        <input type="hidden" name="goodsId" value={item.id} />
+                        <Button type="submit" variant="outline" size="sm">
+                          <CirclePlay className="h-3.5 w-3.5" aria-hidden="true" />
+                          启用
+                        </Button>
+                      </form>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {goods.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-[var(--muted)]">
+                  还没有货物。
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+        <AdminPagination
+          basePath="/admin/goods"
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.totalItems}
+          pageSize={pagination.pageSize}
+        />
+      </section>
     </div>
   );
 }

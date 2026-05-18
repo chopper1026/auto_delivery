@@ -57,5 +57,5 @@ export async function loginAction(_previousState: LoginState, formData: FormData
     expires: session.expiresAt,
   });
 
-  redirect("/admin");
+  redirect("/admin/enter");
 }

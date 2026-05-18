@@ -3,19 +3,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-xl text-sm font-semibold transition disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]",
   {
     variants: {
       variant: {
-        default: "bg-cyan-300 px-4 py-2.5 text-slate-950 hover:bg-cyan-200",
-        destructive: "bg-red-500 px-4 py-2.5 text-white hover:bg-red-400",
-        outline: "border border-slate-700 bg-transparent px-4 py-2.5 text-slate-100 hover:bg-slate-900",
-        ghost: "px-4 py-2.5 text-slate-200 hover:bg-slate-900",
+        default: "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
+        destructive: "bg-[var(--danger)] text-[var(--primary-foreground)] hover:bg-red-700",
+        outline: "border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-muted)]",
+        ghost: "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]",
+        secondary: "bg-[var(--surface-muted)] text-[var(--ink)] hover:bg-[var(--line)]",
       },
       size: {
-        default: "h-10",
-        sm: "h-8 rounded-lg px-3 text-xs",
-        lg: "h-12 px-6 text-base",
+        default: "h-10 px-4 py-2.5",
+        sm: "h-8 px-3 text-xs",
+        lg: "h-12 px-5 text-base",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {

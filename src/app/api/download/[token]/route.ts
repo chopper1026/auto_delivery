@@ -15,7 +15,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     case "NOT_FOUND":
       return new Response("Not found", { status: 404 });
     case "ALREADY_DOWNLOADED":
-      return new Response("Already downloaded", { status: 409 });
+      {
+        const redirectUrl = new URL("/download/already-downloaded", _request.url);
+        redirectUrl.searchParams.set("receipt", token);
+        return Response.redirect(redirectUrl, 303);
+      }
     case "ERROR":
       return new Response("Download unavailable", { status: 500 });
     case "SUCCESS":

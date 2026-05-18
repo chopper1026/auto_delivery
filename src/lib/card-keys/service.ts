@@ -120,9 +120,15 @@ export async function deleteUnredeemedCardKey(cardKeyId: string): Promise<void> 
   });
 }
 
-export async function listCardKeys() {
+export async function countCardKeys() {
+  return prisma.cardKey.count();
+}
+
+export async function listCardKeys(input?: { skip?: number; take?: number }) {
   return prisma.cardKey.findMany({
     include: { goods: { select: { name: true, type: true } } },
     orderBy: { createdAt: "desc" },
+    skip: input?.skip,
+    take: input?.take,
   });
 }

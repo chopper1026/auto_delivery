@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { GoodsFileStatus, GoodsType } from "@/generated/prisma/enums";
+import { GoodsFileStatus, GoodsStatus, GoodsType } from "@/generated/prisma/enums";
 import { resetDatabase } from "../helpers/db";
-import { createFileGoods, createTextGoods, registerGoodsFiles } from "@/lib/goods/service";
+import { createFileGoods, createTextGoods, disableGoods, enableGoods, registerGoodsFiles } from "@/lib/goods/service";
 import { prisma } from "@/lib/db";
 
 afterEach(async () => {
@@ -41,5 +41,15 @@ describe("goods service", () => {
       where: { goodsId: goods.id, status: GoodsFileStatus.AVAILABLE },
     });
     expect(count).toBe(2);
+  });
+
+  it("enables disabled goods again", async () => {
+    const goods = await createTextGoods({ name: "notice", textContent: "hello" });
+
+    await disableGoods(goods.id);
+    await enableGoods(goods.id);
+
+    const enabled = await prisma.goods.findUniqueOrThrow({ where: { id: goods.id } });
+    expect(enabled.status).toBe(GoodsStatus.ACTIVE);
   });
 });

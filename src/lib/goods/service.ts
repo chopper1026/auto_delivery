@@ -60,9 +60,15 @@ export async function registerGoodsFiles(
   return { acceptedCount: files.length };
 }
 
-export async function listGoodsWithInventory() {
+export async function countGoods() {
+  return prisma.goods.count();
+}
+
+export async function listGoodsWithInventory(input?: { skip?: number; take?: number }) {
   const goods = await prisma.goods.findMany({
     orderBy: { createdAt: "desc" },
+    skip: input?.skip,
+    take: input?.take,
     include: { files: { select: { status: true } } },
   });
 
@@ -92,5 +98,12 @@ export async function disableGoods(goodsId: string): Promise<void> {
   await prisma.goods.update({
     where: { id: goodsId },
     data: { status: GoodsStatus.DISABLED },
+  });
+}
+
+export async function enableGoods(goodsId: string): Promise<void> {
+  await prisma.goods.update({
+    where: { id: goodsId },
+    data: { status: GoodsStatus.ACTIVE },
   });
 }

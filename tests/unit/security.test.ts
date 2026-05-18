@@ -23,6 +23,7 @@ describe("security helpers", () => {
 
   it("calculates supported expirations", () => {
     const base = new Date("2026-05-18T00:00:00.000Z");
+    expect(calculateExpiresAt("3m", base)?.toISOString()).toBe(new Date("2026-05-18T00:03:00.000Z").toISOString());
     expect(calculateExpiresAt("1d", base)?.toISOString()).toBe(addDays(base, 1).toISOString());
     expect(calculateExpiresAt("3d", base)?.toISOString()).toBe(addDays(base, 3).toISOString());
     expect(calculateExpiresAt("7d", base)?.toISOString()).toBe(addDays(base, 7).toISOString());

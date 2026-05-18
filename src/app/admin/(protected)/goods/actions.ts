@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdminAction, writeAdminAuditLog } from "@/lib/admin/action-auth";
-import { createFileGoods, createTextGoods, disableGoods, registerGoodsFiles } from "@/lib/goods/service";
+import { createFileGoods, createTextGoods, disableGoods, enableGoods, registerGoodsFiles } from "@/lib/goods/service";
 import { isAllowedInventoryFile, writeUploadedFile } from "@/lib/storage/files";
 
 export async function createTextGoodsAction(formData: FormData): Promise<void> {
@@ -81,6 +81,22 @@ export async function disableGoodsAction(formData: FormData): Promise<void> {
   await writeAdminAuditLog({
     adminUserId: admin.id,
     action: "goods.disable",
+    entityType: "Goods",
+    entityId: goodsId,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+  });
+  revalidatePath("/admin/goods");
+}
+
+export async function enableGoodsAction(formData: FormData): Promise<void> {
+  const { admin, meta } = await requireAdminAction(formData);
+  const goodsId = String(formData.get("goodsId") ?? "");
+
+  await enableGoods(goodsId);
+  await writeAdminAuditLog({
+    adminUserId: admin.id,
+    action: "goods.enable",
     entityType: "Goods",
     entityId: goodsId,
     ipAddress: meta.ipAddress,

@@ -7,6 +7,7 @@ import {
   generateCardKey,
   NotEnoughInventoryError,
 } from "@/lib/card-keys/service";
+import type { ExpirationOption } from "@/lib/time";
 
 export type GenerateCardKeyState = {
   plaintextKey?: string;
@@ -20,7 +21,7 @@ export async function generateCardKeyAction(
 ): Promise<GenerateCardKeyState> {
   const { admin, meta } = await requireAdminAction(formData);
   const goodsId = String(formData.get("goodsId") ?? "");
-  const expiration = String(formData.get("expiration") ?? "3d") as "1d" | "3d" | "7d" | "never";
+  const expiration = String(formData.get("expiration") ?? "3d") as ExpirationOption;
   const rawQuantity = Number(formData.get("fileQuantity") ?? 0);
 
   try {

@@ -1,13 +1,24 @@
-import { Card, CardContent } from "@/components/ui/card";
+import type { LucideIcon } from "lucide-react";
 
-export function StatCard({ label, value, detail }: { label: string; value: number | string; detail?: string }) {
+export function StatCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: number | string;
+  detail?: string;
+  icon?: LucideIcon;
+}) {
   return (
-    <Card>
-      <CardContent className="p-5">
-        <p className="text-sm text-slate-400">{label}</p>
-        <p className="mt-3 text-3xl font-black tracking-tight text-white">{value}</p>
-        {detail ? <p className="mt-2 text-xs text-slate-500">{detail}</p> : null}
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-medium text-[var(--muted)]">{label}</p>
+        {Icon ? <Icon className="h-4 w-4 text-[var(--muted)]" aria-hidden="true" /> : null}
+      </div>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-[var(--ink)]">{value}</p>
+      {detail ? <p className="mt-1 text-xs text-[var(--muted)]">{detail}</p> : null}
+    </div>
   );
 }

@@ -1,0 +1,160 @@
+.background {
+  background:
+    radial-gradient(circle at 50% 36%, oklch(0.965 0.034 122 / 0.58), transparent 32%),
+    radial-gradient(circle at 18% 16%, oklch(0.995 0.015 96 / 0.92), transparent 34%),
+    radial-gradient(circle at 82% 84%, oklch(0.92 0.027 155 / 0.34), transparent 30%),
+    linear-gradient(135deg, oklch(0.992 0.006 95), oklch(0.958 0.016 104) 58%, oklch(0.982 0.011 130));
+  animation: login-bg-in 0.58s ease-out both;
+  transform: translateZ(0);
+  will-change: opacity;
+}
+
+.topLine {
+  transform-origin: center;
+  animation: login-line-in 0.54s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+  will-change: opacity, transform;
+}
+
+.shell {
+  animation: login-shell-in 0.66s cubic-bezier(0.16, 1, 0.3, 1) both;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: opacity, transform;
+}
+
+.card {
+  position: relative;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+.card::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(180deg, oklch(1 0 0 / 0.72), transparent 34%),
+    radial-gradient(circle at 50% 0%, oklch(0.86 0.18 112 / 0.16), transparent 44%);
+  opacity: 0;
+  animation: login-card-light-in 0.86s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+  will-change: opacity;
+}
+
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.logo {
+  animation: login-pop-in 0.52s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+}
+
+.brand,
+.field,
+.action,
+.note {
+  animation: login-rise-in 0.58s cubic-bezier(0.16, 1, 0.3, 1) both;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+}
+
+.brand {
+  animation-delay: 0.2s;
+}
+
+.fieldUsername {
+  animation-delay: 0.3s;
+}
+
+.fieldPassword {
+  animation-delay: 0.38s;
+}
+
+.action {
+  animation-delay: 0.46s;
+}
+
+.note {
+  animation-delay: 0.54s;
+}
+
+@keyframes login-bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes login-line-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.55);
+  }
+  to {
+    opacity: 0.55;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes login-shell-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes login-card-light-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes login-pop-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes login-rise-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .background,
+  .topLine,
+  .shell,
+  .card::before,
+  .logo,
+  .brand,
+  .field,
+  .action,
+  .note {
+    animation-duration: 0.01ms;
+    animation-delay: 0ms;
+  }
+}
