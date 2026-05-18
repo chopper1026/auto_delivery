@@ -1,3 +1,5 @@
+import { RedeemForm } from "@/components/public/redeem-form";
+
 export default function HomePage() {
   return (
     <main className="min-h-screen overflow-hidden bg-[var(--surface)] text-[var(--ink)]">
@@ -12,8 +14,9 @@ export default function HomePage() {
           卡密兑换
         </h1>
         <p className="relative mt-6 max-w-xl text-lg leading-8 text-slate-300">
-          输入卡密后领取对应货物。当前页面是项目骨架，后续任务会接入完整兑换流程。
+          输入卡密后领取对应货物。文本直接展示，文件会生成一次性下载 ZIP。
         </p>
+        <RedeemForm />
       </section>
     </main>
   );
