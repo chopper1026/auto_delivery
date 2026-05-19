@@ -1,9 +1,10 @@
 .git
 .next
 node_modules
+data
 storage
 coverage
-.env
+.env*
 .tmp-*
 Dockerfile
 docker-compose.yml
