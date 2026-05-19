@@ -184,19 +184,13 @@ docker compose config
 docker compose up -d --build
 ```
 
-7. 初始化第一个管理员：
-
-```bash
-docker compose exec app npm run init:admin
-```
-
-8. 查看应用日志，确认启动成功：
+7. 查看应用日志，确认启动成功：
 
 ```bash
 docker compose logs -f app
 ```
 
-9. 配置 HTTPS 反向代理，把生产域名转发到：
+8. 配置 HTTPS 反向代理，把生产域名转发到：
 
 ```text
 http://127.0.0.1:3000
@@ -209,7 +203,7 @@ git pull
 docker compose up -d --build
 ```
 
-应用容器启动时会自动执行 `prisma migrate deploy`。备份时至少备份：
+应用容器启动时会自动执行 `prisma migrate deploy` 和 `npm run init:admin`。`init:admin` 是幂等的：数据库里没有管理员时创建第一个管理员，已有管理员时不会重复创建。备份时至少备份：
 
 ```text
 data/postgres
