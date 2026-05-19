@@ -7,6 +7,7 @@ type ServerActionBodySizeLimit = NonNullable<
 const adminUploadBodyLimit = (process.env.ADMIN_UPLOAD_BODY_LIMIT || "100mb") as ServerActionBodySizeLimit;
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   experimental: {
     serverActions: {
       bodySizeLimit: adminUploadBodyLimit,

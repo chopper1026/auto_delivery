@@ -3,6 +3,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+FROM node:24-alpine AS migrate-deps
+WORKDIR /migrate
+RUN printf '%s\n' '{"private":true,"dependencies":{"prisma":"7.8.0"},"overrides":{"@prisma/dev":{"@hono/node-server":"1.19.13"}}}' > package.json \
+  && npm install --omit=dev --ignore-scripts --no-audit --no-fund
+
 FROM node:24-alpine AS builder
 WORKDIR /app
 ENV DATABASE_URL="postgresql://auto_delivery:auto_delivery@postgres:5432/auto_delivery?schema=public"
@@ -19,15 +24,16 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+COPY --chown=node:node --from=migrate-deps /migrate/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/.next/standalone ./
+COPY --chown=node:node --from=builder /app/.next/static ./.next/static
+COPY --chown=node:node --from=builder /app/public ./public
+COPY --chown=node:node --from=builder /app/prisma ./prisma
+COPY --chown=node:node --from=builder /app/prisma.config.ts ./prisma.config.ts
+COPY --chown=node:node --from=builder /app/scripts/docker-entrypoint.sh ./scripts/docker-entrypoint.sh
+COPY --chown=node:node --from=builder /app/scripts/init-admin-runtime.mjs ./scripts/init-admin-runtime.mjs
 RUN chmod +x /app/scripts/docker-entrypoint.sh \
   && mkdir -p /app/storage/uploads /app/storage/zips /app/storage/tmp \
   && chown -R node:node /app/storage /app/.next
