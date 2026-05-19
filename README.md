@@ -79,3 +79,12 @@ npm run build
 - PostgreSQL 数据卷和 `app-data` 数据卷需要一起备份。
 - 不要手动删除已生成的 ZIP 文件，除非对应的数据库记录也已按预期归档。
 - 初始版本通过 Docker volume 使用本地磁盘存储；只有在文件规模或迁移需求确实需要时，再迁移到对象存储。
+
+## 生产部署检查
+
+1. 设置 `POSTGRES_PASSWORD`、`ADMIN_PASSWORD`、`SECRET_PEPPER` 为生产随机值。
+2. 设置 `APP_BASE_URL` 为 HTTPS 生产域名，保留 `NODE_ENV=production`。
+3. 执行 `docker compose up -d --build`，应用容器启动时会自动运行 `prisma migrate deploy`。
+4. 使用 HTTPS 反向代理暴露应用，不直接暴露 PostgreSQL。
+5. 备份 `postgres-data` 和 `app-data` 两个 volume。
+6. 升级或横向多实例部署前，设置统一 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 和 `deploymentId` 策略。
