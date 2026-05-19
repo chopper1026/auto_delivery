@@ -1,6 +1,13 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { CardKeyStatus, DownloadResult, GoodsFileStatus, GoodsStatus, GoodsType } from "@/generated/prisma/enums";
+import {
+  CardKeyStatus,
+  DownloadResult,
+  GoodsFileStatus,
+  GoodsStatus,
+  GoodsType,
+  RedemptionDownloadState,
+} from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { hashLookupSecret, maskSecret } from "@/lib/security/hash";
 import { sanitizeZipEntryName } from "@/lib/storage/files";
@@ -16,6 +23,26 @@ export class CardKeyNotRedeemableError extends Error {
 
 function createToken() {
   return crypto.randomBytes(32).toString("base64url");
+}
+
+const DOWNLOAD_CLAIM_TTL_MS = 10 * 60 * 1000;
+
+type DownloadErrorResult = { result: "ALREADY_DOWNLOADED" | "NOT_FOUND" | "ERROR" };
+
+type ClaimDownloadResult =
+  | {
+      result: "SUCCESS";
+      redemptionId: string;
+      claimToken: string;
+      zipPath: string;
+      filename: string;
+    }
+  | DownloadErrorResult;
+
+type DownloadClaimMutationResult = { result: "SUCCESS" | "ERROR" };
+
+function downloadFilename(goodsName: string) {
+  return `${sanitizeZipEntryName(goodsName)}.zip`;
 }
 
 export async function redeemCardKey(input: {
@@ -167,6 +194,32 @@ export async function consumeDownload(input: {
   | { result: "SUCCESS"; zipPath: string; filename: string }
   | { result: "ALREADY_DOWNLOADED" | "NOT_FOUND" | "ERROR" }
 > {
+  const claim = await claimDownload(input);
+  if (claim.result !== "SUCCESS") return claim;
+
+  const completed = await completeDownloadClaim({
+    redemptionId: claim.redemptionId,
+    claimToken: claim.claimToken,
+    ipAddress: input.ipAddress,
+    userAgent: input.userAgent,
+  });
+
+  if (completed.result !== "SUCCESS") {
+    return { result: "ERROR" };
+  }
+
+  return {
+    result: "SUCCESS",
+    zipPath: claim.zipPath,
+    filename: claim.filename,
+  };
+}
+
+export async function claimDownload(input: {
+  receiptToken: string;
+  ipAddress: string;
+  userAgent: string;
+}): Promise<ClaimDownloadResult> {
   const receiptTokenHash = hashLookupSecret(input.receiptToken);
   const redemption = await prisma.redemption.findUnique({
     where: { receiptTokenHash },
@@ -198,15 +251,7 @@ export async function consumeDownload(input: {
     return { result: "ERROR" };
   }
 
-  const updated = await prisma.redemption.updateMany({
-    where: { id: redemption.id, downloadCount: 0 },
-    data: {
-      downloadCount: { increment: 1 },
-      firstDownloadedAt: new Date(),
-    },
-  });
-
-  if (updated.count === 0) {
+  if (redemption.downloadState === RedemptionDownloadState.DOWNLOADED || redemption.downloadCount > 0) {
     await prisma.downloadLog.create({
       data: {
         redemptionId: redemption.id,
@@ -219,19 +264,155 @@ export async function consumeDownload(input: {
     return { result: "ALREADY_DOWNLOADED" };
   }
 
-  await prisma.downloadLog.create({
+  const now = new Date();
+  if (
+    redemption.downloadState === RedemptionDownloadState.IN_PROGRESS &&
+    redemption.downloadClaimExpiresAt &&
+    redemption.downloadClaimExpiresAt > now
+  ) {
+    return { result: "ALREADY_DOWNLOADED" };
+  }
+
+  const claimToken = createToken();
+  const claimTokenHash = hashLookupSecret(claimToken);
+  const claimExpiresAt = new Date(now.getTime() + DOWNLOAD_CLAIM_TTL_MS);
+  const updated = await prisma.redemption.updateMany({
+    where: {
+      id: redemption.id,
+      downloadCount: 0,
+      downloadState: { not: RedemptionDownloadState.DOWNLOADED },
+      OR: [
+        { downloadState: RedemptionDownloadState.AVAILABLE },
+        { downloadState: RedemptionDownloadState.IN_PROGRESS, downloadClaimExpiresAt: null },
+        { downloadState: RedemptionDownloadState.IN_PROGRESS, downloadClaimExpiresAt: { lte: now } },
+      ],
+    },
     data: {
-      redemptionId: redemption.id,
-      receiptTokenHash,
-      ipAddress: input.ipAddress,
-      userAgent: input.userAgent,
-      result: DownloadResult.SUCCESS,
+      downloadState: RedemptionDownloadState.IN_PROGRESS,
+      downloadClaimTokenHash: claimTokenHash,
+      downloadClaimExpiresAt: claimExpiresAt,
     },
   });
 
+  if (updated.count === 0) {
+    const current = await prisma.redemption.findUnique({
+      where: { id: redemption.id },
+      select: { downloadState: true, downloadCount: true },
+    });
+
+    if (current?.downloadState === RedemptionDownloadState.DOWNLOADED || (current?.downloadCount ?? 0) > 0) {
+      await prisma.downloadLog.create({
+        data: {
+          redemptionId: redemption.id,
+          receiptTokenHash,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+          result: DownloadResult.ALREADY_DOWNLOADED,
+        },
+      });
+    }
+    return { result: "ALREADY_DOWNLOADED" };
+  }
+
   return {
     result: "SUCCESS",
+    redemptionId: redemption.id,
+    claimToken,
     zipPath: redemption.zipPath,
-    filename: `${sanitizeZipEntryName(redemption.goods.name)}.zip`,
+    filename: downloadFilename(redemption.goods.name),
   };
+}
+
+export async function completeDownloadClaim(input: {
+  redemptionId: string;
+  claimToken: string;
+  ipAddress: string;
+  userAgent: string;
+}): Promise<DownloadClaimMutationResult> {
+  const claimTokenHash = hashLookupSecret(input.claimToken);
+  const now = new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const redemption = await tx.redemption.findUnique({
+      where: { id: input.redemptionId },
+      select: { id: true, receiptTokenHash: true },
+    });
+
+    if (!redemption) return { result: "ERROR" };
+
+    const updated = await tx.redemption.updateMany({
+      where: {
+        id: input.redemptionId,
+        downloadState: RedemptionDownloadState.IN_PROGRESS,
+        downloadClaimTokenHash: claimTokenHash,
+        downloadCount: 0,
+      },
+      data: {
+        downloadState: RedemptionDownloadState.DOWNLOADED,
+        downloadCount: { increment: 1 },
+        downloadClaimTokenHash: null,
+        downloadClaimExpiresAt: null,
+        firstDownloadedAt: now,
+      },
+    });
+
+    if (updated.count === 0) return { result: "ERROR" };
+
+    await tx.downloadLog.create({
+      data: {
+        redemptionId: redemption.id,
+        receiptTokenHash: redemption.receiptTokenHash,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        result: DownloadResult.SUCCESS,
+      },
+    });
+
+    return { result: "SUCCESS" };
+  });
+}
+
+export async function releaseDownloadClaim(input: {
+  redemptionId: string;
+  claimToken: string;
+  ipAddress: string;
+  userAgent: string;
+}): Promise<DownloadClaimMutationResult> {
+  const claimTokenHash = hashLookupSecret(input.claimToken);
+
+  return prisma.$transaction(async (tx) => {
+    const redemption = await tx.redemption.findUnique({
+      where: { id: input.redemptionId },
+      select: { id: true, receiptTokenHash: true },
+    });
+
+    if (!redemption) return { result: "ERROR" };
+
+    const updated = await tx.redemption.updateMany({
+      where: {
+        id: input.redemptionId,
+        downloadState: RedemptionDownloadState.IN_PROGRESS,
+        downloadClaimTokenHash: claimTokenHash,
+      },
+      data: {
+        downloadState: RedemptionDownloadState.AVAILABLE,
+        downloadClaimTokenHash: null,
+        downloadClaimExpiresAt: null,
+      },
+    });
+
+    if (updated.count === 0) return { result: "ERROR" };
+
+    await tx.downloadLog.create({
+      data: {
+        redemptionId: redemption.id,
+        receiptTokenHash: redemption.receiptTokenHash,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        result: DownloadResult.ERROR,
+      },
+    });
+
+    return { result: "SUCCESS" };
+  });
 }

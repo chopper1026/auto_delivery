@@ -1,11 +1,18 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CardKeyStatus, GoodsFileStatus } from "@/generated/prisma/enums";
+import { CardKeyStatus, GoodsFileStatus, RedemptionDownloadState } from "@/generated/prisma/enums";
 import { generateCardKey } from "@/lib/card-keys/service";
 import { prisma } from "@/lib/db";
 import { createFileGoods, createTextGoods, registerGoodsFiles } from "@/lib/goods/service";
-import { consumeDownload, getReceiptByToken, redeemCardKey } from "@/lib/redemption/service";
+import {
+  claimDownload,
+  completeDownloadClaim,
+  consumeDownload,
+  getReceiptByToken,
+  redeemCardKey,
+  releaseDownloadClaim,
+} from "@/lib/redemption/service";
 import { zipRoot } from "@/lib/storage/paths";
 import { resetDatabase } from "../helpers/db";
 
@@ -113,5 +120,91 @@ describe("redemption service", () => {
 
     expect(first.result).toBe("SUCCESS");
     expect(second.result).toBe("ALREADY_DOWNLOADED");
+  });
+
+  it("claims a download without marking the receipt downloaded until the claim completes", async () => {
+    const goods = await createFileGoods({ name: "downloadable" });
+    await createFileInventory(goods.id, 1);
+    const card = await generateCardKey({ goodsId: goods.id, expiration: "3d", fileQuantity: 1 });
+    const redeemed = await redeemCardKey({
+      plaintextKey: card.plaintextKey,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    const claim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    expect(claim.result).toBe("SUCCESS");
+    if (claim.result !== "SUCCESS") throw new Error("expected successful claim");
+
+    const claimedRedemption = await prisma.redemption.findUniqueOrThrow({ where: { id: claim.redemptionId } });
+    const receiptDuringClaim = await getReceiptByToken(redeemed.receiptToken);
+    expect(claimedRedemption.downloadCount).toBe(0);
+    expect(claimedRedemption.firstDownloadedAt).toBeNull();
+    expect(claimedRedemption.downloadState).toBe(RedemptionDownloadState.IN_PROGRESS);
+    expect(receiptDuringClaim && "downloaded" in receiptDuringClaim ? receiptDuringClaim.downloaded : true).toBe(false);
+
+    await expect(
+      completeDownloadClaim({
+        redemptionId: claim.redemptionId,
+        claimToken: claim.claimToken,
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      }),
+    ).resolves.toEqual({ result: "SUCCESS" });
+
+    const completedRedemption = await prisma.redemption.findUniqueOrThrow({ where: { id: claim.redemptionId } });
+    expect(completedRedemption.downloadCount).toBe(1);
+    expect(completedRedemption.firstDownloadedAt).toBeInstanceOf(Date);
+    expect(completedRedemption.downloadState).toBe(RedemptionDownloadState.DOWNLOADED);
+    expect(completedRedemption.downloadClaimTokenHash).toBeNull();
+    expect(completedRedemption.downloadClaimExpiresAt).toBeNull();
+  });
+
+  it("releases a failed download claim so the receipt can be claimed again", async () => {
+    const goods = await createFileGoods({ name: "retryable" });
+    await createFileInventory(goods.id, 1);
+    const card = await generateCardKey({ goodsId: goods.id, expiration: "3d", fileQuantity: 1 });
+    const redeemed = await redeemCardKey({
+      plaintextKey: card.plaintextKey,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+    const firstClaim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    expect(firstClaim.result).toBe("SUCCESS");
+    if (firstClaim.result !== "SUCCESS") throw new Error("expected successful first claim");
+
+    await expect(
+      releaseDownloadClaim({
+        redemptionId: firstClaim.redemptionId,
+        claimToken: firstClaim.claimToken,
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      }),
+    ).resolves.toEqual({ result: "SUCCESS" });
+
+    const secondClaim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    expect(secondClaim.result).toBe("SUCCESS");
+    if (secondClaim.result !== "SUCCESS") throw new Error("expected successful second claim");
+    expect(secondClaim.claimToken).not.toBe(firstClaim.claimToken);
+
+    const redemption = await prisma.redemption.findUniqueOrThrow({ where: { id: secondClaim.redemptionId } });
+    expect(redemption.downloadCount).toBe(0);
+    expect(redemption.firstDownloadedAt).toBeNull();
+    expect(redemption.downloadState).toBe(RedemptionDownloadState.IN_PROGRESS);
   });
 });

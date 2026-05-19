@@ -38,6 +38,12 @@ enum DownloadResult {
   ERROR
 }
 
+enum RedemptionDownloadState {
+  AVAILABLE
+  IN_PROGRESS
+  DOWNLOADED
+}
+
 model AdminUser {
   id           String          @id @default(cuid())
   username     String          @unique
@@ -126,25 +132,29 @@ model CardKey {
 }
 
 model Redemption {
-  id                 String           @id @default(cuid())
-  cardKeyId          String           @unique
-  goodsId            String
-  receiptTokenHash   String           @unique
-  receiptTokenMask   String
-  ipAddress          String
-  userAgent          String
-  redeemedAt         DateTime         @default(now())
-  zipPath            String?
-  zipSizeBytes       Int?
-  downloadCount      Int              @default(0)
-  firstDownloadedAt  DateTime?
-  cardKey            CardKey          @relation(fields: [cardKeyId], references: [id], onDelete: Restrict)
-  goods              Goods            @relation(fields: [goodsId], references: [id], onDelete: Restrict)
-  files              RedemptionFile[]
-  redeemedGoodsFiles GoodsFile[]      @relation("RedeemedGoodsFiles")
-  downloadLogs       DownloadLog[]
+  id                     String                  @id @default(cuid())
+  cardKeyId              String                  @unique
+  goodsId                String
+  receiptTokenHash       String                  @unique
+  receiptTokenMask       String
+  ipAddress              String
+  userAgent              String
+  redeemedAt             DateTime                @default(now())
+  zipPath                String?
+  zipSizeBytes           Int?
+  downloadCount          Int                     @default(0)
+  downloadState          RedemptionDownloadState @default(AVAILABLE)
+  downloadClaimTokenHash String?
+  downloadClaimExpiresAt DateTime?
+  firstDownloadedAt      DateTime?
+  cardKey                CardKey                 @relation(fields: [cardKeyId], references: [id], onDelete: Restrict)
+  goods                  Goods                   @relation(fields: [goodsId], references: [id], onDelete: Restrict)
+  files                  RedemptionFile[]
+  redeemedGoodsFiles     GoodsFile[]             @relation("RedeemedGoodsFiles")
+  downloadLogs           DownloadLog[]
 
   @@index([goodsId, redeemedAt])
+  @@index([downloadState, downloadClaimExpiresAt])
 }
 
 model RedemptionFile {
