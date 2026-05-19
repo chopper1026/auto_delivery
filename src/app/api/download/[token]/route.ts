@@ -67,6 +67,7 @@ function createDownloadStream(
       nodeStream.once("end", () => {
         if (settled) return;
         settled = true;
+        controller.close();
 
         void completeDownloadClaim({
           redemptionId: claim.redemptionId,
@@ -81,9 +82,6 @@ function createDownloadStream(
           })
           .catch((error) => {
             console.error("Failed to complete download claim", { redemptionId: claim.redemptionId, error });
-          })
-          .finally(() => {
-            controller.close();
           });
       });
 

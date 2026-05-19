@@ -100,6 +100,43 @@ describe("download route", () => {
     expect(mockedReleaseDownloadClaim).not.toHaveBeenCalled();
   });
 
+  it("closes the response body before waiting for claim completion", async () => {
+    await fs.mkdir(tmp, { recursive: true });
+    const zipPath = path.join(tmp, "close-before-complete.zip");
+    await fs.writeFile(zipPath, "zip-bytes");
+    let resolveCompletion!: (value: { result: "SUCCESS" }) => void;
+    mockedClaimDownload.mockResolvedValueOnce({
+      result: "SUCCESS",
+      redemptionId: "redemption-id",
+      claimToken: "claim-token",
+      zipPath,
+      filename: "download.zip",
+    });
+    mockedCompleteDownloadClaim.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCompletion = resolve;
+      }),
+    );
+
+    const response = await GET(downloadRequest(), { params: Promise.resolve({ token: "receipt-token" }) });
+    const readBody = response.arrayBuffer();
+    const raceResult = await Promise.race([
+      readBody.then((body) => Buffer.from(body).toString("utf8")),
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 25)),
+    ]);
+
+    resolveCompletion({ result: "SUCCESS" });
+    await readBody;
+
+    expect(raceResult).toBe("zip-bytes");
+    expect(mockedCompleteDownloadClaim).toHaveBeenCalledWith({
+      redemptionId: "redemption-id",
+      claimToken: "claim-token",
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+  });
+
   it("releases the claim when the claimed zip is missing", async () => {
     mockedClaimDownload.mockResolvedValueOnce({
       result: "SUCCESS",
