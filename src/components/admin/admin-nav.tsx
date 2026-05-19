@@ -34,6 +34,7 @@ export function AdminNav() {
         </Link>
         <Link
           href="/admin/logout"
+          prefetch={false}
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)] lg:hidden"
           aria-label="退出登录"
         >
@@ -68,6 +69,7 @@ export function AdminNav() {
       <div className="mt-auto hidden pt-8 lg:block">
         <Link
           href="/admin/logout"
+          prefetch={false}
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]"
         >
           <LogOut className="h-4 w-4" aria-hidden="true" />
