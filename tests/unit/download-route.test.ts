@@ -122,4 +122,62 @@ describe("download route", () => {
     });
     expect(mockedCompleteDownloadClaim).not.toHaveBeenCalled();
   });
+
+  it("releases the claim when the download stream is canceled", async () => {
+    await fs.mkdir(tmp, { recursive: true });
+    const zipPath = path.join(tmp, "cancel.zip");
+    await fs.writeFile(zipPath, Buffer.alloc(1024 * 1024, 1));
+    mockedClaimDownload.mockResolvedValueOnce({
+      result: "SUCCESS",
+      redemptionId: "redemption-id",
+      claimToken: "claim-token",
+      zipPath,
+      filename: "download.zip",
+    });
+    mockedReleaseDownloadClaim.mockResolvedValueOnce({ result: "SUCCESS" });
+
+    const response = await GET(downloadRequest(), { params: Promise.resolve({ token: "receipt-token" }) });
+    await response.body?.cancel();
+
+    expect(mockedReleaseDownloadClaim).toHaveBeenCalledWith({
+      redemptionId: "redemption-id",
+      claimToken: "claim-token",
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+    expect(mockedCompleteDownloadClaim).not.toHaveBeenCalled();
+  });
+
+  it("logs structured context when claim completion returns ERROR after the stream ends", async () => {
+    await fs.mkdir(tmp, { recursive: true });
+    const zipPath = path.join(tmp, "complete-error.zip");
+    await fs.writeFile(zipPath, "zip-bytes");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockedClaimDownload.mockResolvedValueOnce({
+      result: "SUCCESS",
+      redemptionId: "redemption-id",
+      claimToken: "claim-token",
+      zipPath,
+      filename: "download.zip",
+    });
+    mockedCompleteDownloadClaim.mockResolvedValueOnce({ result: "ERROR" });
+
+    try {
+      const response = await GET(downloadRequest(), { params: Promise.resolve({ token: "receipt-token" }) });
+      await response.arrayBuffer();
+
+      expect(mockedCompleteDownloadClaim).toHaveBeenCalledWith({
+        redemptionId: "redemption-id",
+        claimToken: "claim-token",
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      });
+      expect(consoleError).toHaveBeenCalledWith("Download claim completion failed", {
+        redemptionId: "redemption-id",
+        result: "ERROR",
+      });
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });

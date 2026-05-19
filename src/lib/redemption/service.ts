@@ -264,15 +264,20 @@ export async function claimDownload(input: {
     return { result: "ALREADY_DOWNLOADED" };
   }
 
-  const now = new Date();
-  if (
-    redemption.downloadState === RedemptionDownloadState.IN_PROGRESS &&
-    redemption.downloadClaimExpiresAt &&
-    redemption.downloadClaimExpiresAt > now
-  ) {
+  if (redemption.downloadState === RedemptionDownloadState.IN_PROGRESS) {
+    await prisma.downloadLog.create({
+      data: {
+        redemptionId: redemption.id,
+        receiptTokenHash,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        result: DownloadResult.ALREADY_DOWNLOADED,
+      },
+    });
     return { result: "ALREADY_DOWNLOADED" };
   }
 
+  const now = new Date();
   const claimToken = createToken();
   const claimTokenHash = hashLookupSecret(claimToken);
   const claimExpiresAt = new Date(now.getTime() + DOWNLOAD_CLAIM_TTL_MS);
@@ -280,12 +285,7 @@ export async function claimDownload(input: {
     where: {
       id: redemption.id,
       downloadCount: 0,
-      downloadState: { not: RedemptionDownloadState.DOWNLOADED },
-      OR: [
-        { downloadState: RedemptionDownloadState.AVAILABLE },
-        { downloadState: RedemptionDownloadState.IN_PROGRESS, downloadClaimExpiresAt: null },
-        { downloadState: RedemptionDownloadState.IN_PROGRESS, downloadClaimExpiresAt: { lte: now } },
-      ],
+      downloadState: RedemptionDownloadState.AVAILABLE,
     },
     data: {
       downloadState: RedemptionDownloadState.IN_PROGRESS,
@@ -300,7 +300,11 @@ export async function claimDownload(input: {
       select: { downloadState: true, downloadCount: true },
     });
 
-    if (current?.downloadState === RedemptionDownloadState.DOWNLOADED || (current?.downloadCount ?? 0) > 0) {
+    if (
+      current?.downloadState === RedemptionDownloadState.DOWNLOADED ||
+      current?.downloadState === RedemptionDownloadState.IN_PROGRESS ||
+      (current?.downloadCount ?? 0) > 0
+    ) {
       await prisma.downloadLog.create({
         data: {
           redemptionId: redemption.id,

@@ -21,6 +21,14 @@ function noStoreResponse(body: BodyInit | null, init: ResponseInit) {
   return new Response(body, { ...init, headers });
 }
 
+function logClaimReleaseFailure(redemptionId: string, result: "ERROR") {
+  console.error("Download claim release failed", { redemptionId, result });
+}
+
+function logClaimCompletionFailure(redemptionId: string, result: "ERROR") {
+  console.error("Download claim completion failed", { redemptionId, result });
+}
+
 function createDownloadStream(
   claim: SuccessfulDownloadClaim,
   meta: { ipAddress: string; userAgent: string },
@@ -34,9 +42,15 @@ function createDownloadStream(
       claimToken: claim.claimToken,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
-    }).catch((error) => {
-      console.error("Failed to release download claim", error);
-    });
+    })
+      .then((released) => {
+        if (released.result !== "SUCCESS") {
+          logClaimReleaseFailure(claim.redemptionId, released.result);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to release download claim", { redemptionId: claim.redemptionId, error });
+      });
   }
 
   return new ReadableStream<Uint8Array>({
@@ -60,8 +74,13 @@ function createDownloadStream(
           ipAddress: meta.ipAddress,
           userAgent: meta.userAgent,
         })
+          .then((completed) => {
+            if (completed.result !== "SUCCESS") {
+              logClaimCompletionFailure(claim.redemptionId, completed.result);
+            }
+          })
           .catch((error) => {
-            console.error("Failed to complete download claim", error);
+            console.error("Failed to complete download claim", { redemptionId: claim.redemptionId, error });
           })
           .finally(() => {
             controller.close();
@@ -129,12 +148,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   if (!fs.existsSync(result.zipPath)) {
-    await releaseDownloadClaim({
+    const released = await releaseDownloadClaim({
       redemptionId: result.redemptionId,
       claimToken: result.claimToken,
       ipAddress,
       userAgent,
     });
+    if (released.result !== "SUCCESS") {
+      logClaimReleaseFailure(result.redemptionId, released.result);
+    }
     return noStoreResponse("Download unavailable", { status: 500 });
   }
 

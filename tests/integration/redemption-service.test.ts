@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { CardKeyStatus, GoodsFileStatus, RedemptionDownloadState } from "@/generated/prisma/enums";
+import { CardKeyStatus, DownloadResult, GoodsFileStatus, RedemptionDownloadState } from "@/generated/prisma/enums";
 import { generateCardKey } from "@/lib/card-keys/service";
 import { prisma } from "@/lib/db";
 import { createFileGoods, createTextGoods, registerGoodsFiles } from "@/lib/goods/service";
@@ -206,5 +206,97 @@ describe("redemption service", () => {
     expect(redemption.downloadCount).toBe(0);
     expect(redemption.firstDownloadedAt).toBeNull();
     expect(redemption.downloadState).toBe(RedemptionDownloadState.IN_PROGRESS);
+  });
+
+  it("denies a second active claim without replacing the claim token hash even when the claim is expired", async () => {
+    const goods = await createFileGoods({ name: "single-active-claim" });
+    await createFileInventory(goods.id, 1);
+    const card = await generateCardKey({ goodsId: goods.id, expiration: "3d", fileQuantity: 1 });
+    const redeemed = await redeemCardKey({
+      plaintextKey: card.plaintextKey,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+    const firstClaim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    expect(firstClaim.result).toBe("SUCCESS");
+    if (firstClaim.result !== "SUCCESS") throw new Error("expected successful first claim");
+
+    const beforeSecondClaim = await prisma.redemption.update({
+      where: { id: firstClaim.redemptionId },
+      data: { downloadClaimExpiresAt: new Date("2026-01-01T00:00:00.000Z") },
+      select: { downloadClaimTokenHash: true },
+    });
+
+    const secondClaim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    const afterSecondClaim = await prisma.redemption.findUniqueOrThrow({
+      where: { id: firstClaim.redemptionId },
+      select: { downloadClaimTokenHash: true, downloadState: true, downloadCount: true },
+    });
+    const duplicateLogs = await prisma.downloadLog.count({
+      where: {
+        redemptionId: firstClaim.redemptionId,
+        result: DownloadResult.ALREADY_DOWNLOADED,
+      },
+    });
+
+    expect(secondClaim).toEqual({ result: "ALREADY_DOWNLOADED" });
+    expect(afterSecondClaim.downloadClaimTokenHash).toBe(beforeSecondClaim.downloadClaimTokenHash);
+    expect(afterSecondClaim.downloadState).toBe(RedemptionDownloadState.IN_PROGRESS);
+    expect(afterSecondClaim.downloadCount).toBe(0);
+    expect(duplicateLogs).toBe(1);
+  });
+
+  it("returns ERROR when completing or releasing with the wrong claim token", async () => {
+    const goods = await createFileGoods({ name: "wrong-claim-token" });
+    await createFileInventory(goods.id, 1);
+    const card = await generateCardKey({ goodsId: goods.id, expiration: "3d", fileQuantity: 1 });
+    const redeemed = await redeemCardKey({
+      plaintextKey: card.plaintextKey,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+    const claim = await claimDownload({
+      receiptToken: redeemed.receiptToken,
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    expect(claim.result).toBe("SUCCESS");
+    if (claim.result !== "SUCCESS") throw new Error("expected successful claim");
+
+    await expect(
+      completeDownloadClaim({
+        redemptionId: claim.redemptionId,
+        claimToken: "wrong-claim-token",
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      }),
+    ).resolves.toEqual({ result: "ERROR" });
+    await expect(
+      releaseDownloadClaim({
+        redemptionId: claim.redemptionId,
+        claimToken: "wrong-claim-token",
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      }),
+    ).resolves.toEqual({ result: "ERROR" });
+
+    const redemption = await prisma.redemption.findUniqueOrThrow({
+      where: { id: claim.redemptionId },
+      select: { downloadState: true, downloadCount: true, downloadClaimTokenHash: true },
+    });
+    expect(redemption.downloadState).toBe(RedemptionDownloadState.IN_PROGRESS);
+    expect(redemption.downloadCount).toBe(0);
+    expect(redemption.downloadClaimTokenHash).toBeTruthy();
   });
 });
