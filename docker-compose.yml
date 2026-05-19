@@ -2,9 +2,11 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       POSTGRES_USER: auto_delivery
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: auto_delivery
+    command: ["postgres", "-c", "timezone=${TZ:-Asia/Shanghai}", "-c", "log_timezone=${TZ:-Asia/Shanghai}"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U auto_delivery -d auto_delivery"]
       interval: 10s
@@ -20,6 +22,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
       DATABASE_URL: postgresql://auto_delivery:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/auto_delivery?schema=public
       ADMIN_USERNAME: ${ADMIN_USERNAME:?set ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}

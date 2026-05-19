@@ -36,6 +36,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata
 COPY --chown=node:node --from=migrate-deps /migrate/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/.next/standalone ./
 COPY --chown=node:node --from=builder /app/.next/static ./.next/static

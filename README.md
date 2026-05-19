@@ -52,6 +52,7 @@ cp .env.example .env
 | `SESSION_COOKIE_NAME` | 否 | 管理后台 session cookie 名称，默认 `auto_delivery_admin`。 |
 | `APP_BASE_URL` | 是 | 对外服务地址，用于生成卡密交付文案里的兑换链接。生产环境应使用 HTTPS。 |
 | `APP_PORT` | 否 | Docker Compose 发布到宿主机的端口，默认 `3000`；如果服务器端口冲突可改成其他空闲端口。 |
+| `TZ` | 否 | Docker 容器时区，默认 `Asia/Shanghai`。 |
 | `STORAGE_ROOT` | 否 | 本地文件存储根目录，默认 `./storage`。 |
 | `ADMIN_UPLOAD_BODY_LIMIT` | 否 | Next Server Actions 请求体上限，默认 `100mb`。 |
 | `NODE_ENV` | 否 | `development`、`test` 或 `production`。 |
@@ -165,6 +166,7 @@ ADMIN_PASSWORD="换成至少12位强密码"
 SECRET_PEPPER="换成至少32位随机字符串"
 APP_BASE_URL="https://你的域名"
 APP_PORT="3000"
+TZ="Asia/Shanghai"
 NODE_ENV="production"
 ```
 
