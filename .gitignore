@@ -42,6 +42,7 @@ yarn-error.log*
 !.env.example
 
 # local storage
+/data
 /storage
 /storage-test
 /src/generated/prisma

@@ -172,44 +172,37 @@ NODE_ENV="production"
 mkdir -p data/postgres data/storage
 ```
 
-5. 把 `docker-compose.yml` 的两个 volume 改成宿主机目录绑定挂载：
-
-```yaml
-services:
-  postgres:
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-
-  app:
-    volumes:
-      - ./data/storage:/app/storage
-```
-
-6. 检查 Compose 配置：
+5. 检查 Compose 配置：
 
 ```bash
 docker compose config
 ```
 
-7. 构建并启动：
+6. 构建并启动：
 
 ```bash
 docker compose up -d --build
 ```
 
-8. 初始化第一个管理员：
+7. 初始化第一个管理员：
 
 ```bash
 docker compose exec app npm run init:admin
 ```
 
-9. 查看应用日志，确认启动成功：
+8. 查看应用日志，确认启动成功：
 
 ```bash
 docker compose logs -f app
 ```
 
-应用默认暴露在宿主机 `3000` 端口。生产环境建议用 HTTPS 反向代理转发到 `http://127.0.0.1:3000`，不要直接暴露 PostgreSQL。后续升级时执行：
+9. 配置 HTTPS 反向代理，把生产域名转发到：
+
+```text
+http://127.0.0.1:3000
+```
+
+应用默认暴露在宿主机 `3000` 端口，不要直接暴露 PostgreSQL。后续升级时执行：
 
 ```bash
 git pull
