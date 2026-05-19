@@ -1,6 +1,7 @@
 import { CardKeyStatus, GoodsFileStatus, GoodsStatus, GoodsType } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
 import { generatePlaintextCardKey } from "@/lib/card-keys/generator";
 import { hashLookupSecret, maskSecret } from "@/lib/security/hash";
 import { calculateExpiresAt, type ExpirationOption } from "@/lib/time";
@@ -29,6 +30,21 @@ export type CardKeyListFilters = {
   query?: string;
   status?: CardKeyStatus;
 };
+
+function quoteSqlIdentifier(identifier: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
+    throw new Error("Unsafe database identifier.");
+  }
+  return `"${identifier}"`;
+}
+
+function getDatabaseSchemaName() {
+  return new URL(env.DATABASE_URL).searchParams.get("schema") || "public";
+}
+
+function qualifiedDatabaseName(name: string) {
+  return `${quoteSqlIdentifier(getDatabaseSchemaName())}.${quoteSqlIdentifier(name)}`;
+}
 
 function buildCardKeyWhere(input?: CardKeyListFilters): Prisma.CardKeyWhereInput {
   const query = input?.query?.trim();
@@ -84,12 +100,22 @@ export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
       throw new NotEnoughInventoryError();
     }
 
-    const availableFiles = await tx.goodsFile.findMany({
-      where: { goodsId: goods.id, status: GoodsFileStatus.AVAILABLE },
-      orderBy: { createdAt: "asc" },
-      take: quantity,
-      select: { id: true },
-    });
+    const goodsFileTable = qualifiedDatabaseName("GoodsFile");
+    const goodsFileStatusType = qualifiedDatabaseName("GoodsFileStatus");
+    const availableFiles = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `
+        SELECT id
+        FROM ${goodsFileTable}
+        WHERE "goodsId" = $1
+          AND status = $2::${goodsFileStatusType}
+        ORDER BY "createdAt" ASC
+        LIMIT $3
+        FOR UPDATE SKIP LOCKED
+      `,
+      goods.id,
+      GoodsFileStatus.AVAILABLE,
+      quantity,
+    );
 
     if (availableFiles.length < quantity) {
       throw new NotEnoughInventoryError();
@@ -106,14 +132,21 @@ export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
       },
     });
 
-    await tx.goodsFile.updateMany({
-      where: { id: { in: availableFiles.map((file) => file.id) } },
+    const reserved = await tx.goodsFile.updateMany({
+      where: {
+        id: { in: availableFiles.map((file) => file.id) },
+        status: GoodsFileStatus.AVAILABLE,
+      },
       data: {
         status: GoodsFileStatus.RESERVED,
         reservedByCardKeyId: card.id,
         reservedAt: new Date(),
       },
     });
+
+    if (reserved.count !== quantity) {
+      throw new NotEnoughInventoryError();
+    }
 
     return { plaintextKey, keyMask, cardKeyId: card.id, createdAt: card.createdAt, expiresAt };
   });
