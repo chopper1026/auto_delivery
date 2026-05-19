@@ -17,6 +17,9 @@
 # local planning notes
 /docs/superpowers/
 
+# local worktrees
+/.worktrees/
+
 # next.js
 /.next/
 /out/
