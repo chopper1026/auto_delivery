@@ -9,6 +9,8 @@ import styles from "./public-pages.module.css";
 
 const BRAND_WORD = "AutoDelivery";
 const brandFont = parisienne as unknown as TegakiBundle;
+const brandInkWeight = "oklch(0.64 0.17 48 / 0.62)";
+const brandGlow = "oklch(0.78 0.12 78 / 0.32)";
 const writeEase = (progress: number) => 1 - Math.pow(1 - progress, 2.8);
 const strokeEase = (progress: number) => 1 - Math.pow(1 - progress, 3.2);
 
@@ -51,8 +53,8 @@ export function AnimatedBrandWord({ className }: { className?: string }) {
           smoothing: true,
         }}
         effects={{
-          inkWeight: { effect: "glow", radius: 0.32, color: "oklch(0.58 0.085 155 / 0.76)", order: -1 },
-          glow: { enabled: true, radius: 0.92, color: "oklch(0.62 0.078 155 / 0.48)" },
+          inkWeight: { effect: "glow", radius: 0.32, color: brandInkWeight, order: -1 },
+          glow: { enabled: true, radius: 0.92, color: brandGlow },
           pressureWidth: { enabled: true, strength: 0.26 },
           taper: { enabled: true, startLength: 2.8, endLength: 2.2 },
           wobble: { enabled: true, amplitude: 0.12, frequency: 0.7 },

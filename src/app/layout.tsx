@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Dancing_Script, Geist, Geist_Mono, Long_Cang } from "next/font/google";
+import { Dancing_Script, Geist, Geist_Mono, ZCOOL_XiaoWei } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,8 +19,8 @@ const dancingScript = Dancing_Script({
   display: "block",
 });
 
-const chineseScript = Long_Cang({
-  variable: "--font-chinese-script",
+const cardTitleFont = ZCOOL_XiaoWei({
+  variable: "--font-card-title",
   subsets: ["latin"],
   weight: "400",
   display: "block",
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} ${dancingScript.variable} ${chineseScript.variable} h-full antialiased`}>
+    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} ${dancingScript.variable} ${cardTitleFont.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

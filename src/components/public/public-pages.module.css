@@ -1,6 +1,11 @@
 .publicPage {
   position: relative;
   isolation: isolate;
+  --redeem-brand: oklch(0.64 0.17 48);
+  --redeem-brand-soft: oklch(0.79 0.12 78);
+  --redeem-button: oklch(0.79 0.15 78);
+  --redeem-button-hover: oklch(0.73 0.16 70);
+  --redeem-button-ink: oklch(0.22 0.055 58);
   background:
     radial-gradient(circle at 50% 0%, oklch(0.92 0.052 155 / 0.55), transparent 34%),
     linear-gradient(145deg, oklch(0.992 0.006 96), oklch(0.958 0.016 104) 62%, oklch(0.982 0.011 130));
@@ -304,13 +309,25 @@
   position: relative;
   display: inline-block;
   min-width: 232px;
-  color: var(--primary);
+  color: var(--redeem-brand, var(--primary));
   backface-visibility: hidden;
 }
 
 .brandWrite {
   min-height: 1.04em;
-  color: var(--primary);
+  color: var(--redeem-brand, var(--primary));
+}
+
+.brandWarm {
+  color: var(--redeem-brand);
+}
+
+.redeemTitle {
+  font-family: var(--font-card-title), var(--font-geist-sans), "Noto Serif SC", serif;
+}
+
+.redeemText {
+  font-family: var(--font-card-title), var(--font-geist-sans), "Noto Serif SC", serif;
 }
 
 .brandTegaki {
@@ -318,28 +335,28 @@
   width: 116%;
   font-size: 1.16em;
   line-height: 1;
-  color: oklch(0.58 0.085 155);
-  filter: drop-shadow(0 0 10px oklch(0.58 0.085 155 / 0.16));
+  color: var(--redeem-brand);
+  filter: drop-shadow(0 0 10px oklch(0.79 0.12 78 / 0.18));
   pointer-events: none;
 }
 
 .brandTegaki [data-tegaki="canvas"] {
   filter:
-    drop-shadow(0.48px 0 0 oklch(0.58 0.085 155 / 0.64))
-    drop-shadow(-0.48px 0 0 oklch(0.58 0.085 155 / 0.56))
-    drop-shadow(0 0.48px 0 oklch(0.58 0.085 155 / 0.56))
-    drop-shadow(0 -0.48px 0 oklch(0.58 0.085 155 / 0.48))
-    drop-shadow(0 0 0.5px oklch(0.58 0.085 155 / 0.34));
+    drop-shadow(0.48px 0 0 oklch(0.64 0.17 48 / 0.54))
+    drop-shadow(-0.48px 0 0 oklch(0.64 0.17 48 / 0.46))
+    drop-shadow(0 0.48px 0 oklch(0.64 0.17 48 / 0.46))
+    drop-shadow(0 -0.48px 0 oklch(0.64 0.17 48 / 0.4))
+    drop-shadow(0 0 0.5px oklch(0.79 0.12 78 / 0.3));
 }
 
 .brandTegaki [data-tegaki="overlay"] {
-  color: oklch(0.72 0.04 155 / 0.24) !important;
-  -webkit-text-fill-color: oklch(0.72 0.04 155 / 0.24) !important;
+  color: oklch(0.82 0.085 78 / 0.22) !important;
+  -webkit-text-fill-color: oklch(0.82 0.085 78 / 0.22) !important;
   text-shadow:
-    0.45px 0 0 oklch(0.72 0.04 155 / 0.2),
-    -0.45px 0 0 oklch(0.72 0.04 155 / 0.18),
-    0 0.45px 0 oklch(0.72 0.04 155 / 0.18),
-    0 -0.45px 0 oklch(0.72 0.04 155 / 0.16),
+    0.45px 0 0 oklch(0.82 0.085 78 / 0.2),
+    -0.45px 0 0 oklch(0.82 0.085 78 / 0.18),
+    0 0.45px 0 oklch(0.82 0.085 78 / 0.18),
+    0 -0.45px 0 oklch(0.82 0.085 78 / 0.16),
     0 1px 0 oklch(1 0 0 / 0.44);
 }
 
@@ -373,6 +390,82 @@
   border-radius: 13px;
   background: var(--primary-soft);
   opacity: 0.72;
+}
+
+.redeemButton.redeemButton {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--redeem-button-ink);
+  font-family: var(--font-card-title), var(--font-geist-sans), "Noto Serif SC", serif;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--redeem-button);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.58),
+    0 12px 28px -22px oklch(0.37 0.11 66 / 0.64);
+  transform: translate3d(0, 0, 0);
+  transition:
+    background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.redeemButton.redeemButton::before {
+  position: absolute;
+  inset: -40% auto -40% -36%;
+  z-index: 0;
+  width: 34%;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.38), transparent);
+  opacity: 0;
+  transform: translate3d(0, 0, 0) skewX(-18deg);
+  transition:
+    opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.64s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.redeemButton.redeemButton svg {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.redeemButton.redeemButton:hover {
+  background: var(--redeem-button-hover);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.5),
+    inset 0 -8px 16px -18px oklch(0.35 0.12 58 / 0.7),
+    0 16px 32px -23px oklch(0.37 0.11 66 / 0.72);
+  filter: saturate(1.03);
+  transform: translate3d(0, -1px, 0);
+}
+
+.redeemButton.redeemButton:hover::before {
+  opacity: 1;
+  transform: translate3d(420%, 0, 0) skewX(-18deg);
+}
+
+.redeemButton.redeemButton:hover svg {
+  transform: translate3d(2px, 0, 0);
+}
+
+.redeemButton.redeemButton:active {
+  box-shadow:
+    inset 0 2px 8px oklch(0.36 0.12 58 / 0.2),
+    0 8px 20px -20px oklch(0.37 0.11 66 / 0.62);
+  transform: translate3d(0, 1px, 0) scale(0.992);
+}
+
+.redeemButton.redeemButton:focus-visible {
+  outline-color: var(--redeem-button-hover);
+  box-shadow:
+    0 0 0 4px oklch(0.88 0.11 78 / 0.58),
+    inset 0 1px 0 oklch(1 0 0 / 0.5),
+    0 16px 32px -23px oklch(0.37 0.11 66 / 0.72);
 }
 
 .errorMessage {
@@ -489,5 +582,11 @@
   .receiptContent {
     animation-duration: 0.01ms;
     animation-delay: 0ms;
+  }
+
+  .redeemButton.redeemButton,
+  .redeemButton.redeemButton::before,
+  .redeemButton.redeemButton svg {
+    transition-duration: 0.01ms;
   }
 }

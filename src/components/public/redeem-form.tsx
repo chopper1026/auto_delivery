@@ -19,7 +19,7 @@ export function RedeemForm() {
   return (
     <form action={formAction} className={cn(styles.formEnter, "space-y-4")}>
       <div>
-        <label htmlFor="cardKey" className="mb-2 block text-sm font-semibold text-[var(--muted-strong)]">
+        <label htmlFor="cardKey" className={cn(styles.redeemText, "mb-2 block text-[15px] font-bold text-[var(--muted-strong)]")}>
           卡密
         </label>
         <div className={styles.inputWrap}>
@@ -41,7 +41,7 @@ export function RedeemForm() {
         </div>
       </div>
 
-      <Button type="submit" size="lg" className="h-12 w-full rounded-[10px]" disabled={pending}>
+      <Button type="submit" size="lg" className={cn(styles.redeemButton, "h-12 w-full rounded-[10px]")} disabled={pending}>
         {pending ? "校验中" : "确认兑换"}
         <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </Button>

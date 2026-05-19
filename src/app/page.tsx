@@ -68,8 +68,8 @@ export default function HomePage() {
           </svg>
           <div className="mb-7 flex items-start justify-between gap-5 border-b border-dashed border-[var(--line)] pb-6">
             <div className="min-w-0">
-              <AnimatedBrandWord className="brand-script text-[34px] font-extrabold leading-none text-[var(--primary)]" />
-              <h1 className="mt-4 text-[32px] font-normal leading-none tracking-tight text-[var(--ink)]">卡密兑换</h1>
+              <AnimatedBrandWord className={cn(styles.brandWarm, "brand-script text-[34px] font-extrabold leading-none")} />
+              <h1 className={cn(styles.redeemTitle, "mt-4 text-[32px] font-normal leading-none tracking-tight text-[var(--ink)]")}>卡密兑换</h1>
             </div>
             <span className={cn(styles.stamp, styles.duckStamp, "flex h-12 w-12 shrink-0 items-center justify-center")}>
               <Image
