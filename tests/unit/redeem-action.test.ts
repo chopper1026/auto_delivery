@@ -40,7 +40,11 @@ describe("redeemAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedGetRequestMeta.mockResolvedValue({ ipAddress: "127.0.0.1", userAgent: "vitest" });
-    mockedConsumeRateLimit.mockResolvedValue({ allowed: true, remaining: 19, resetAt: Date.now() + 60_000 });
+    mockedConsumeRateLimit.mockResolvedValue({
+      allowed: true,
+      remaining: 19,
+      resetAt: new Date(Date.now() + 60_000),
+    });
   });
 
   it("returns a receipt href after a successful redemption", async () => {
@@ -70,7 +74,11 @@ describe("redeemAction", () => {
   });
 
   it("returns the existing rate-limit error before redeeming", async () => {
-    mockedConsumeRateLimit.mockResolvedValueOnce({ allowed: false, remaining: 0, resetAt: Date.now() + 60_000 });
+    mockedConsumeRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      remaining: 0,
+      resetAt: new Date(Date.now() + 60_000),
+    });
 
     await expect(redeemAction({}, formDataFor("AD-ABCD-EF12-3456-7890"))).resolves.toEqual({
       status: "error",

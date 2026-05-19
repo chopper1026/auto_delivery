@@ -46,7 +46,7 @@ const mockedCreateZipFromFiles = vi.mocked(createZipFromFiles);
 describe("goods export route", () => {
   it("rejects empty export scopes instead of downloading an empty zip", async () => {
     mockedRequireAdminSession.mockResolvedValueOnce({
-      admin: { id: "admin-1", username: "admin", passwordHash: "hash", createdAt: new Date() },
+      admin: { id: "admin-1", username: "admin" },
       token: "session-token",
     });
     mockedGetRequestMeta.mockResolvedValueOnce({ ipAddress: "127.0.0.1", userAgent: "vitest" });

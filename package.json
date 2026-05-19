@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "tsx scripts/run-tests.ts run",
     "test:watch": "tsx scripts/run-tests.ts",
     "prisma:generate": "prisma generate",
