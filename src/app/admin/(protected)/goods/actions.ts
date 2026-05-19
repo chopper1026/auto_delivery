@@ -5,6 +5,10 @@ import { requireAdminAction, writeAdminAuditLog } from "@/lib/admin/action-auth"
 import { createFileGoods, createTextGoods, deleteGoods, disableGoods, enableGoods, registerGoodsFiles } from "@/lib/goods/service";
 import { isAllowedInventoryFile, writeUploadedFile } from "@/lib/storage/files";
 
+const maxUploadFiles = 200;
+const maxUploadBytes = 100 * 1024 * 1024;
+const maxSingleUploadBytes = 5 * 1024 * 1024;
+
 export async function createTextGoodsAction(formData: FormData): Promise<void> {
   const { admin, meta } = await requireAdminAction(formData);
   const goods = await createTextGoods({
@@ -50,8 +54,20 @@ export async function uploadGoodsFilesAction(formData: FormData): Promise<void> 
     throw new Error("No files selected.");
   }
 
+  if (files.length > maxUploadFiles) {
+    throw new Error(`Too many files selected. Maximum is ${maxUploadFiles}.`);
+  }
+
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  if (totalBytes > maxUploadBytes) {
+    throw new Error("Selected files are too large.");
+  }
+
   const saved = [];
   for (const file of files) {
+    if (file.size > maxSingleUploadBytes) {
+      throw new Error("A selected file is too large.");
+    }
     if (!isAllowedInventoryFile(file.name, file.type)) {
       throw new Error("Only JSON files are allowed.");
     }
