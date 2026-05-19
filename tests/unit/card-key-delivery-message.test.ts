@@ -26,4 +26,19 @@ describe("card key delivery message", () => {
     expect(message).toContain("兑换完成后请及时保存");
     expect(message).toContain("不予处理");
   });
+
+  it("renders a custom delivery message template with card-key variables", () => {
+    const message = buildCardKeyDeliveryMessage({
+      serviceBaseUrl: "https://example.com/shop",
+      plaintextKey: "AD-AAAA-BBBB-CCCC-DDDD",
+      createdAt: new Date("2026-05-19T06:00:00.000Z"),
+      expiresAt: null,
+      template: "地址：{{redeemUrl}}\n卡：{{cardKey}}\n建：{{createdAt}}\n期：{{expiresAt}}",
+    });
+
+    expect(message).toContain("地址：https://example.com/shop/");
+    expect(message).toContain("卡：AD-AAAA-BBBB-CCCC-DDDD");
+    expect(message).toContain("建：2026");
+    expect(message).toContain("期：永不过期");
+  });
 });

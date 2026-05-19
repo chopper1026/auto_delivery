@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, Check, ChevronDown, Clipboard, FileText, KeyRound, Search, Wand2, X } from "lucide-react";
+import { Archive, Check, ChevronDown, Copy, FileText, KeyRound, Search, Wand2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { generateCardKeyAction, type GenerateCardKeyState } from "@/app/admin/(protected)/cards/actions";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,6 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
   const [goodsQuery, setGoodsQuery] = useState("");
   const [goodsFilter, setGoodsFilter] = useState<CardKeyGoodsFilter>("ALL");
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
-  const [copied, setCopied] = useState(false);
   const pickerTriggerRef = useRef<HTMLDivElement>(null);
   const pickerPanelRef = useRef<HTMLDivElement>(null);
   const selected = useMemo(
@@ -142,20 +141,6 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
       window.removeEventListener("scroll", updatePickerPosition, true);
     };
   }, [pickerOpen]);
-
-  async function copyGeneratedKey() {
-    const text = state.deliveryMessage ?? state.plaintextKey;
-    if (!text) return;
-    const fallbackCopied = copyWithTextareaFallback(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-    if (!navigator.clipboard?.writeText) return;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      if (!fallbackCopied) setCopied(false);
-    }
-  }
 
   return (
     <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">
@@ -321,27 +306,13 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
         <AnimatePresence mode="popLayout">
           {state.plaintextKey ? (
             <motion.div
-              className="mt-4 rounded-lg border border-[var(--primary)]/20 bg-[var(--primary-soft)] p-4"
+              className="mt-4"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              <p className="text-sm font-medium text-[var(--primary)]">完整卡密只显示一次，可直接复制客户文案</p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <code className="min-w-0 flex-1 break-all rounded-lg bg-[var(--surface)] px-3 py-2 font-mono text-base font-semibold text-[var(--ink)]">
-                  {state.plaintextKey}
-                </code>
-                <Button type="button" variant="outline" onClick={copyGeneratedKey}>
-                  {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Clipboard className="h-4 w-4" aria-hidden="true" />}
-                  {copied ? "已复制" : "复制给客户"}
-                </Button>
-              </div>
-              {state.deliveryMessage ? (
-                <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3 text-sm leading-6 text-[var(--ink)]">
-                  {state.deliveryMessage}
-                </pre>
-              ) : null}
+              <GeneratedCardKeyResult plaintextKey={state.plaintextKey} deliveryMessage={state.deliveryMessage} />
             </motion.div>
           ) : null}
           {state.error ? (
@@ -358,5 +329,75 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
         </AnimatePresence>
       </div>
     </section>
+  );
+}
+
+function copyText(text: string) {
+  const fallbackCopied = copyWithTextareaFallback(text);
+  if (!navigator.clipboard?.writeText) return Promise.resolve(fallbackCopied);
+
+  return navigator.clipboard
+    .writeText(text)
+    .then(() => true)
+    .catch(() => fallbackCopied);
+}
+
+function ResultCopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    const didCopy = await copyText(text);
+    if (!didCopy) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      onClick={handleCopy}
+      aria-label={label}
+      className="h-8 w-8 shrink-0 rounded-md text-[var(--muted-strong)]"
+    >
+      {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+    </Button>
+  );
+}
+
+export function GeneratedCardKeyResult({
+  plaintextKey,
+  deliveryMessage,
+}: {
+  plaintextKey: string;
+  deliveryMessage?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--primary)]/20 bg-[var(--primary-soft)] p-4">
+      <p className="text-sm font-medium text-[var(--primary)]">完整卡密只显示一次</p>
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)]">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)]">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-3 py-2">
+            <h4 className="text-sm font-semibold text-[var(--ink)]">纯卡密</h4>
+            <ResultCopyButton text={plaintextKey} label="复制纯卡密" />
+          </div>
+          <code className="block min-h-20 break-all px-3 py-3 font-mono text-base font-semibold leading-7 text-[var(--ink)]">
+            {plaintextKey}
+          </code>
+        </section>
+        {deliveryMessage ? (
+          <section className="min-w-0 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-3 py-2">
+              <h4 className="text-sm font-semibold text-[var(--ink)]">客户文案</h4>
+              <ResultCopyButton text={deliveryMessage} label="复制客户文案" />
+            </div>
+            <pre className="max-h-60 min-h-20 overflow-auto whitespace-pre-wrap break-words px-3 py-3 text-sm leading-6 text-[var(--ink)]">
+              {deliveryMessage}
+            </pre>
+          </section>
+        ) : null}
+      </div>
+    </div>
   );
 }

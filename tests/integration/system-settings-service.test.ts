@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getServiceBaseUrl, updateServiceBaseUrl } from "@/lib/settings/service";
+import {
+  DEFAULT_CARD_KEY_DELIVERY_MESSAGE_TEMPLATE,
+  getCardKeyDeliveryMessageTemplate,
+  getServiceBaseUrl,
+  updateCardKeyDeliveryMessageTemplate,
+  updateServiceBaseUrl,
+} from "@/lib/settings/service";
 import { env } from "@/lib/env";
 import { resetDatabase } from "../helpers/db";
 
@@ -16,5 +22,15 @@ describe("system settings service", () => {
     await updateServiceBaseUrl(" https://delivery.example.com/path/// ");
 
     await expect(getServiceBaseUrl()).resolves.toBe("https://delivery.example.com/path");
+  });
+
+  it("uses the default customer message template until a preference is configured", async () => {
+    await expect(getCardKeyDeliveryMessageTemplate()).resolves.toBe(DEFAULT_CARD_KEY_DELIVERY_MESSAGE_TEMPLATE);
+  });
+
+  it("persists the configured customer message template", async () => {
+    await updateCardKeyDeliveryMessageTemplate("客户您好：\n{{cardKey}}\n{{redeemUrl}}");
+
+    await expect(getCardKeyDeliveryMessageTemplate()).resolves.toBe("客户您好：\n{{cardKey}}\n{{redeemUrl}}");
   });
 });

@@ -8,7 +8,7 @@ import {
   NotEnoughInventoryError,
 } from "@/lib/card-keys/service";
 import { buildCardKeyDeliveryMessage } from "@/lib/card-keys/delivery-message";
-import { getServiceBaseUrl } from "@/lib/settings/service";
+import { getCardKeyDeliveryMessageTemplate, getServiceBaseUrl } from "@/lib/settings/service";
 import type { ExpirationOption } from "@/lib/time";
 
 export type GenerateCardKeyState = {
@@ -33,12 +33,16 @@ export async function generateCardKeyAction(
       expiration,
       fileQuantity: Number.isFinite(rawQuantity) ? rawQuantity : 0,
     });
-    const serviceBaseUrl = await getServiceBaseUrl();
+    const [serviceBaseUrl, template] = await Promise.all([
+      getServiceBaseUrl(),
+      getCardKeyDeliveryMessageTemplate(),
+    ]);
     const deliveryMessage = buildCardKeyDeliveryMessage({
       serviceBaseUrl,
       plaintextKey: generated.plaintextKey,
       createdAt: generated.createdAt,
       expiresAt: generated.expiresAt,
+      template,
     });
 
     await writeAdminAuditLog({
