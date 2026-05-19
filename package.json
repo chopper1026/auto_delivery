@@ -47,5 +47,11 @@
     "tsx": "^4.22.1",
     "typescript": "^5",
     "vitest": "^4.1.6"
+  },
+  "overrides": {
+    "@prisma/dev": {
+      "@hono/node-server": "1.19.13"
+    },
+    "postcss": "8.5.14"
   }
 }
