@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Dancing_Script, Geist, Geist_Mono } from "next/font/google";
+import { Dancing_Script, Geist, Geist_Mono, Long_Cang } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,6 +19,13 @@ const dancingScript = Dancing_Script({
   display: "block",
 });
 
+const chineseScript = Long_Cang({
+  variable: "--font-chinese-script",
+  subsets: ["latin"],
+  weight: "400",
+  display: "block",
+});
+
 export const metadata: Metadata = {
   title: "Auto Delivery",
   description: "Card-key based automatic delivery system",
@@ -30,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} ${dancingScript.variable} h-full antialiased`}>
+    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} ${dancingScript.variable} ${chineseScript.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

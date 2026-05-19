@@ -78,7 +78,7 @@ describe("redemption service", () => {
   });
 
   it("redeems file goods, creates a zip, and consumes one download", async () => {
-    const goods = await createFileGoods({ name: "cpa文件" });
+    const goods = await createFileGoods({ name: "cpa文件", note: "下载后请先解压。" });
     await createFileInventory(goods.id, 2);
     const card = await generateCardKey({ goodsId: goods.id, expiration: "3d", fileQuantity: 2 });
 
@@ -94,6 +94,8 @@ describe("redemption service", () => {
     });
 
     expect(receipt?.kind).toBe("FILE");
+    expect(receipt && "fileQuantity" in receipt ? receipt.fileQuantity : 0).toBe(2);
+    expect(receipt && "goodsNote" in receipt ? receipt.goodsNote : "").toBe("下载后请先解压。");
     expect(redemption.zipPath).toBeTruthy();
     expect(await fs.stat(redemption.zipPath || "")).toMatchObject({ size: expect.any(Number) });
     expect(redeemedFiles).toBe(2);

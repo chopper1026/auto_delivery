@@ -1,28 +1,42 @@
-import { Archive, CirclePlay, FileText, PauseCircle, Upload } from "lucide-react";
+import { Archive, FileText } from "lucide-react";
+import { GoodsActions } from "@/components/admin/goods-actions";
+import { AdminListFilters } from "@/components/admin/list-filters";
 import { NewGoodsDialog } from "@/components/admin/new-goods-dialog";
 import { AdminPagination } from "@/components/admin/pagination";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GoodsStatus } from "@/generated/prisma/enums";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { formatGoodsStatus, formatGoodsType } from "@/lib/display-labels";
 import { countGoods, listGoodsWithInventory } from "@/lib/goods/service";
 import { getPagination, parsePageParam } from "@/lib/pagination";
+import { getFirstSearchParam } from "@/lib/search-params";
 import { rotateCsrfToken } from "@/lib/security/csrf";
-import { disableGoodsAction, enableGoodsAction, uploadGoodsFilesAction } from "./actions";
+
+const goodsStatusOptions = [GoodsStatus.ACTIVE, GoodsStatus.DISABLED].map((status) => ({
+  value: status,
+  label: formatGoodsStatus(status),
+}));
+
+function parseGoodsStatus(value: string): GoodsStatus | undefined {
+  return value === GoodsStatus.ACTIVE || value === GoodsStatus.DISABLED ? value : undefined;
+}
 
 export default async function AdminGoodsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<{ page?: string | string[]; q?: string | string[]; status?: string | string[] }>;
 }) {
   const params = await searchParams;
   const { token } = await requireAdminSession();
   const csrfToken = await rotateCsrfToken(token);
-  const totalGoods = await countGoods();
+  const query = getFirstSearchParam(params.q).trim();
+  const status = parseGoodsStatus(getFirstSearchParam(params.status));
+  const statusParam = status ?? "";
+  const filters = { query, status };
+  const totalGoods = await countGoods(filters);
   const pagination = getPagination({ page: parsePageParam(params.page), totalItems: totalGoods });
-  const goods = await listGoodsWithInventory({ skip: pagination.skip, take: pagination.pageSize });
+  const goods = await listGoodsWithInventory({ ...filters, skip: pagination.skip, take: pagination.pageSize });
 
   return (
     <div className="space-y-5">
@@ -34,20 +48,29 @@ export default async function AdminGoodsPage({
       </header>
 
       <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
+        <div className="border-b border-[var(--line)] px-4 py-3">
           <div>
             <h3 className="font-semibold text-[var(--ink)]">库存工作区</h3>
             <p className="mt-1 text-sm text-[var(--muted)]">文件货物可在行内上传 JSON，货物可按状态启用或停用。</p>
           </div>
+          <AdminListFilters
+            action="/admin/goods"
+            query={query}
+            status={statusParam}
+            searchPlaceholder="搜索货物名称"
+            statusOptions={goodsStatusOptions}
+            resetHref="/admin/goods"
+            className="mt-3 max-w-2xl"
+          />
         </div>
-        <Table>
+        <Table className="min-w-[980px]">
           <TableHeader>
             <TableRow>
               <TableHead>货物</TableHead>
               <TableHead>类型</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>库存</TableHead>
-              <TableHead className="min-w-64">操作</TableHead>
+              <TableHead className="min-w-[260px]">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -58,7 +81,10 @@ export default async function AdminGoodsPage({
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted-strong)]">
                       {item.type === "TEXT" ? <FileText className="h-4 w-4" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
                     </span>
-                    <span className="font-medium text-[var(--ink)]">{item.name}</span>
+                    <span className="min-w-0">
+                      <span className="block font-medium text-[var(--ink)]">{item.name}</span>
+                      {item.note ? <span className="mt-1 block max-w-[260px] truncate text-xs text-[var(--muted)]">{item.note}</span> : null}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell>{formatGoodsType(item.type)}</TableCell>
@@ -78,45 +104,22 @@ export default async function AdminGoodsPage({
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                    {item.type === "FILE" ? (
-                      <form action={uploadGoodsFilesAction} className="flex shrink-0 items-center gap-2">
-                        <input type="hidden" name="csrfToken" value={csrfToken} />
-                        <input type="hidden" name="goodsId" value={item.id} />
-                        <Input name="files" type="file" accept=".json,application/json" multiple required className="w-56 min-w-0 max-w-full" />
-                        <Button type="submit" variant="outline" size="sm">
-                          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-                          上传
-                        </Button>
-                      </form>
-                    ) : null}
-                    {item.status === "ACTIVE" ? (
-                      <form action={disableGoodsAction}>
-                        <input type="hidden" name="csrfToken" value={csrfToken} />
-                        <input type="hidden" name="goodsId" value={item.id} />
-                        <Button type="submit" variant="outline" size="sm" className="text-[var(--danger)] hover:bg-[var(--danger-soft)]">
-                          <PauseCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                          停用
-                        </Button>
-                      </form>
-                    ) : (
-                      <form action={enableGoodsAction}>
-                        <input type="hidden" name="csrfToken" value={csrfToken} />
-                        <input type="hidden" name="goodsId" value={item.id} />
-                        <Button type="submit" variant="outline" size="sm">
-                          <CirclePlay className="h-3.5 w-3.5" aria-hidden="true" />
-                          启用
-                        </Button>
-                      </form>
-                    )}
-                  </div>
+                  <GoodsActions
+                    csrfToken={csrfToken}
+                    goodsId={item.id}
+                    goodsName={item.name}
+                    goodsType={item.type}
+                    inventory={item.inventory}
+                    usage={item.usage}
+                    status={item.status}
+                  />
                 </TableCell>
               </TableRow>
             ))}
             {goods.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-[var(--muted)]">
-                  还没有货物。
+                  {query || status ? "没有匹配的货物。" : "还没有货物。"}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -128,6 +131,7 @@ export default async function AdminGoodsPage({
           totalPages={pagination.totalPages}
           totalItems={pagination.totalItems}
           pageSize={pagination.pageSize}
+          query={{ q: query, status: statusParam }}
         />
       </section>
     </div>

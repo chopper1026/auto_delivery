@@ -1,16 +1,18 @@
-import { Archive, Trash2 } from "lucide-react";
+import { Archive } from "lucide-react";
 import { CardKeyForm } from "@/components/admin/card-key-form";
+import { DeleteCardKeyButton } from "@/components/admin/delete-card-key-button";
+import { AdminListFilters } from "@/components/admin/list-filters";
 import { AdminPagination } from "@/components/admin/pagination";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CardKeyStatus } from "@/generated/prisma/enums";
 import { requireAdminSession } from "@/lib/admin/auth";
 import { countCardKeys, listCardKeys } from "@/lib/card-keys/service";
 import { formatCardKeyStatus, formatGoodsType } from "@/lib/display-labels";
 import { listGoodsWithInventory } from "@/lib/goods/service";
 import { getPagination, parsePageParam } from "@/lib/pagination";
+import { getFirstSearchParam } from "@/lib/search-params";
 import { rotateCsrfToken } from "@/lib/security/csrf";
-import { deleteCardKeyAction } from "./actions";
 
 function formatDate(date: Date | null) {
   if (!date) return "永不过期";
@@ -24,24 +26,43 @@ function cardStatusVariant(status: string): BadgeProps["variant"] {
   return "warning";
 }
 
+const cardStatusOptions = [
+  CardKeyStatus.ACTIVE,
+  CardKeyStatus.REDEEMED,
+  CardKeyStatus.EXPIRED,
+  CardKeyStatus.DELETED,
+].map((status) => ({
+  value: status,
+  label: formatCardKeyStatus(status),
+}));
+
+function parseCardStatus(value: string): CardKeyStatus | undefined {
+  return Object.values(CardKeyStatus).includes(value as CardKeyStatus) ? (value as CardKeyStatus) : undefined;
+}
+
 export default async function AdminCardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<{ page?: string | string[]; q?: string | string[]; status?: string | string[] }>;
 }) {
   const params = await searchParams;
   const { token } = await requireAdminSession();
   const csrfToken = await rotateCsrfToken(token);
-  const [goods, totalCards] = await Promise.all([listGoodsWithInventory(), countCardKeys()]);
+  const query = getFirstSearchParam(params.q).trim();
+  const status = parseCardStatus(getFirstSearchParam(params.status));
+  const statusParam = status ?? "";
+  const filters = { query, status };
+  const [goods, totalCards] = await Promise.all([listGoodsWithInventory(), countCardKeys(filters)]);
   const pagination = getPagination({ page: parsePageParam(params.page), totalItems: totalCards });
-  const cards = await listCardKeys({ skip: pagination.skip, take: pagination.pageSize });
+  const cards = await listCardKeys({ ...filters, skip: pagination.skip, take: pagination.pageSize });
   const goodsOptions = goods
     .filter((item) => item.status === "ACTIVE")
     .map((item) => ({
       id: item.id,
       name: item.name,
+      note: item.note,
       type: item.type,
-      available: item.inventory.available,
+      inventory: item.inventory,
     }));
 
   return (
@@ -55,13 +76,30 @@ export default async function AdminCardsPage({
       <CardKeyForm csrfToken={csrfToken} goods={goodsOptions} />
 
       <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">
-        <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3">
+        <div className="border-b border-[var(--line)] px-4 py-3">
           <div>
             <h3 className="font-semibold text-[var(--ink)]">卡密状态表</h3>
             <p className="mt-1 text-sm text-[var(--muted)]">完整卡密只在生成后展示，列表仅保留掩码。</p>
           </div>
+          <AdminListFilters
+            action="/admin/cards"
+            query={query}
+            status={statusParam}
+            searchPlaceholder="搜索货物名称或卡密后四位"
+            statusOptions={cardStatusOptions}
+            resetHref="/admin/cards"
+            className="mt-3 max-w-2xl"
+          />
         </div>
-        <Table className="w-[1320px] max-w-full">
+        <Table className="min-w-[1000px] table-fixed">
+          <colgroup>
+            <col className="w-[18%]" />
+            <col className="w-[22%]" />
+            <col className="w-[12%]" />
+            <col className="w-[12%]" />
+            <col className="w-[24%]" />
+            <col className="w-[12%]" />
+          </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead>卡密</TableHead>
@@ -69,17 +107,17 @@ export default async function AdminCardsPage({
               <TableHead>交付</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>过期时间</TableHead>
-              <TableHead className="w-32 pr-12">操作</TableHead>
+              <TableHead className="pl-2">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cards.map((card) => (
               <TableRow key={card.id}>
-                <TableCell className="font-mono font-medium text-[var(--ink)]">{card.keyMask}</TableCell>
-                <TableCell className="w-32 pr-12">
+                <TableCell className="truncate font-mono font-medium text-[var(--ink)]">{card.keyMask}</TableCell>
+                <TableCell>
                   <div className="flex items-center gap-2">
                     <Archive className="h-4 w-4 text-[var(--muted)]" aria-hidden="true" />
-                    <span className="font-medium text-[var(--ink)]">{card.goods.name}</span>
+                    <span className="truncate font-medium text-[var(--ink)]">{card.goods.name}</span>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -89,26 +127,17 @@ export default async function AdminCardsPage({
                   <Badge variant={cardStatusVariant(card.status)}>{formatCardKeyStatus(card.status)}</Badge>
                 </TableCell>
                 <TableCell>{formatDate(card.expiresAt)}</TableCell>
-                <TableCell>
-                  <div className="flex justify-start">
-                    {card.status === "ACTIVE" ? (
-                      <form action={deleteCardKeyAction}>
-                        <input type="hidden" name="csrfToken" value={csrfToken} />
-                        <input type="hidden" name="cardKeyId" value={card.id} />
-                        <Button type="submit" variant="ghost" size="sm">
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          删除
-                        </Button>
-                      </form>
-                    ) : null}
-                  </div>
+                <TableCell className="pl-2">
+                  {card.status === "ACTIVE" ? (
+                    <DeleteCardKeyButton cardKeyId={card.id} csrfToken={csrfToken} keyMask={card.keyMask} />
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}
             {cards.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center text-[var(--muted)]">
-                  还没有卡密。
+                  {query || status ? "没有匹配的卡密。" : "还没有卡密。"}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -120,6 +149,7 @@ export default async function AdminCardsPage({
           totalPages={pagination.totalPages}
           totalItems={pagination.totalItems}
           pageSize={pagination.pageSize}
+          query={{ q: query, status: statusParam }}
         />
       </section>
     </div>

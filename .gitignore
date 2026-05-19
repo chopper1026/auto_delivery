@@ -37,6 +37,7 @@ yarn-error.log*
 
 # local storage
 /storage
+/storage-test
 /src/generated/prisma
 
 # vercel

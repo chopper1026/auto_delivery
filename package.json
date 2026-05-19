@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "tsx scripts/run-tests.ts run",
+    "test:watch": "tsx scripts/run-tests.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "init:admin": "tsx scripts/init-admin.ts"
@@ -29,6 +29,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0",
+    "tegaki": "^0.17.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { CardKeyNotRedeemableError, redeemCardKey } from "@/lib/redemption/service";
+import { formatCardKeyInput } from "@/lib/card-key-input";
 import { getRequestMeta } from "@/lib/request-meta";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
@@ -10,7 +11,7 @@ export type RedeemState = {
 };
 
 export async function redeemAction(_previousState: RedeemState, formData: FormData): Promise<RedeemState> {
-  const cardKey = String(formData.get("cardKey") ?? "").trim().toUpperCase();
+  const cardKey = formatCardKeyInput(String(formData.get("cardKey") ?? ""));
   const meta = await getRequestMeta();
 
   const limit = await consumeRateLimit({

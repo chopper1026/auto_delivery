@@ -92,6 +92,10 @@ export function NewGoodsDialog({ csrfToken }: { csrfToken: string }) {
                 <Label htmlFor="new-file-goods-name">名称</Label>
                 <Input id="new-file-goods-name" name="name" placeholder="例如：CPA 文件" required autoFocus />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-file-goods-note">备注</Label>
+                <Textarea id="new-file-goods-note" name="note" placeholder="例如：下载后请先解压，再导入工具。" />
+              </div>
               <div className="flex justify-end gap-2 pt-1">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                   取消

@@ -3,11 +3,16 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { ZipArchive } from "archiver";
 
+type ZipArchiveWithAppend = ZipArchive & {
+  append(content: string, options: { name: string }): void;
+};
+
 export async function createZipFromFiles(
   files: Array<{ path: string; entryName: string }>,
   destinationPath: string,
+  textEntries: Array<{ entryName: string; content: string }> = [],
 ): Promise<{ sizeBytes: number }> {
-  if (files.length === 0) {
+  if (files.length === 0 && textEntries.length === 0) {
     throw new Error("Cannot create an empty ZIP package.");
   }
 
@@ -15,7 +20,7 @@ export async function createZipFromFiles(
 
   await new Promise<void>((resolve, reject) => {
     const output = fs.createWriteStream(destinationPath);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } }) as ZipArchiveWithAppend;
 
     const fail = async (error: Error) => {
       try {
@@ -30,6 +35,9 @@ export async function createZipFromFiles(
     archive.on("error", fail);
 
     archive.pipe(output);
+    for (const entry of textEntries) {
+      archive.append(entry.content, { name: entry.entryName });
+    }
     for (const file of files) {
       archive.file(file.path, { name: file.entryName });
     }

@@ -1,4 +1,5 @@
 import { CardKeyStatus, GoodsFileStatus, GoodsStatus, GoodsType } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { generatePlaintextCardKey } from "@/lib/card-keys/generator";
 import { hashLookupSecret, maskSecret } from "@/lib/security/hash";
@@ -23,6 +24,29 @@ export type GenerateCardKeyInput = {
   expiration: ExpirationOption;
   fileQuantity?: number;
 };
+
+export type CardKeyListFilters = {
+  query?: string;
+  status?: CardKeyStatus;
+};
+
+function buildCardKeyWhere(input?: CardKeyListFilters): Prisma.CardKeyWhereInput {
+  const query = input?.query?.trim();
+  const where: Prisma.CardKeyWhereInput = {};
+
+  if (input?.status) {
+    where.status = input.status;
+  }
+
+  if (query) {
+    where.OR = [
+      { goods: { name: { contains: query, mode: "insensitive" } } },
+      { keyMask: { endsWith: query, mode: "insensitive" } },
+    ];
+  }
+
+  return where;
+}
 
 export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
   plaintextKey: string;
@@ -120,12 +144,13 @@ export async function deleteUnredeemedCardKey(cardKeyId: string): Promise<void> 
   });
 }
 
-export async function countCardKeys() {
-  return prisma.cardKey.count();
+export async function countCardKeys(input?: CardKeyListFilters) {
+  return prisma.cardKey.count({ where: buildCardKeyWhere(input) });
 }
 
-export async function listCardKeys(input?: { skip?: number; take?: number }) {
+export async function listCardKeys(input?: CardKeyListFilters & { skip?: number; take?: number }) {
   return prisma.cardKey.findMany({
+    where: buildCardKeyWhere(input),
     include: { goods: { select: { name: true, type: true } } },
     orderBy: { createdAt: "desc" },
     skip: input?.skip,

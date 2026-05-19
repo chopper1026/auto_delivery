@@ -130,12 +130,12 @@ export async function redeemCardKey(input: {
 
 export async function getReceiptByToken(token: string): Promise<
   | { kind: "TEXT"; goodsName: string; textContent: string; redeemedAt: Date }
-  | { kind: "FILE"; goodsName: string; redeemedAt: Date; downloaded: boolean }
+  | { kind: "FILE"; goodsName: string; goodsNote: string | null; redeemedAt: Date; downloaded: boolean; fileQuantity: number }
   | null
 > {
   const redemption = await prisma.redemption.findUnique({
     where: { receiptTokenHash: hashLookupSecret(token) },
-    include: { goods: true },
+    include: { goods: true, cardKey: { select: { fileQuantity: true } } },
   });
 
   if (!redemption) return null;
@@ -152,8 +152,10 @@ export async function getReceiptByToken(token: string): Promise<
   return {
     kind: "FILE",
     goodsName: redemption.goods.name,
+    goodsNote: redemption.goods.note,
     redeemedAt: redemption.redeemedAt,
     downloaded: redemption.downloadCount > 0,
+    fileQuantity: redemption.cardKey.fileQuantity,
   };
 }
 

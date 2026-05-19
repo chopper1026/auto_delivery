@@ -28,8 +28,8 @@ export function AdminNav() {
             <PackageCheck className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
-            <p className="brand-script text-lg font-bold leading-5 text-[var(--primary)]">AutoDelivery</p>
-            <h1 className="text-base font-semibold text-[var(--ink)]">管理控制台</h1>
+            <p className="brand-script text-[26px] font-bold leading-none text-[var(--primary)]">AutoDelivery</p>
+            <h1 className="mt-0.5 text-xs font-medium leading-4 text-[var(--ink)]">管理控制台</h1>
           </div>
         </Link>
         <Link

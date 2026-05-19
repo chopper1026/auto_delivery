@@ -55,6 +55,8 @@ npm run lint
 npm run build
 ```
 
+`npm run test` 会自动使用 `TEST_DATABASE_URL`。如果没有配置，会从 `DATABASE_URL` 派生出同库 `schema=test` 的测试 schema，并在测试前自动执行迁移；测试清库不会影响开发库的管理员和业务数据。
+
 ## V1 手动验收清单
 
 1. 在 `/admin` 登录。

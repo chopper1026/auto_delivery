@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { CardKeyStatus, GoodsFileStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
-import { generateCardKey, NotEnoughInventoryError, deleteUnredeemedCardKey } from "@/lib/card-keys/service";
+import { countCardKeys, deleteUnredeemedCardKey, generateCardKey, listCardKeys, NotEnoughInventoryError } from "@/lib/card-keys/service";
 import { createFileGoods, createTextGoods, registerGoodsFiles } from "@/lib/goods/service";
 import { resetDatabase } from "../helpers/db";
 
@@ -72,5 +72,20 @@ describe("card key service", () => {
     });
     expect(card.status).toBe(CardKeyStatus.DELETED);
     expect(available).toBe(2);
+  });
+
+  it("filters card keys by goods name, visible key suffix, and status", async () => {
+    const alpha = await createTextGoods({ name: "Alpha 文本", textContent: "hello" });
+    const beta = await createTextGoods({ name: "Beta 文本", textContent: "hello" });
+    const alphaCard = await generateCardKey({ goodsId: alpha.id, expiration: "3d" });
+    const betaCard = await generateCardKey({ goodsId: beta.id, expiration: "3d" });
+    await deleteUnredeemedCardKey(betaCard.cardKeyId);
+
+    const byGoodsName = await listCardKeys({ query: "alpha" });
+    const betaSuffix = betaCard.keyMask.slice(-4).toLowerCase();
+    const deletedBySuffixCount = await countCardKeys({ query: betaSuffix, status: CardKeyStatus.DELETED });
+
+    expect(byGoodsName.map((card) => card.id)).toEqual([alphaCard.cardKeyId]);
+    expect(deletedBySuffixCount).toBe(1);
   });
 });
