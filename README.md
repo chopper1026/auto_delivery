@@ -51,6 +51,7 @@ cp .env.example .env
 | `SECRET_PEPPER` | 是 | 至少 32 字符，用于卡密、凭证 token、CSRF 等查询哈希。修改后既有卡密和凭证 token 会失效。 |
 | `SESSION_COOKIE_NAME` | 否 | 管理后台 session cookie 名称，默认 `auto_delivery_admin`。 |
 | `APP_BASE_URL` | 是 | 对外服务地址，用于生成卡密交付文案里的兑换链接。生产环境应使用 HTTPS。 |
+| `APP_PORT` | 否 | Docker Compose 发布到宿主机的端口，默认 `3000`；如果服务器端口冲突可改成其他空闲端口。 |
 | `STORAGE_ROOT` | 否 | 本地文件存储根目录，默认 `./storage`。 |
 | `ADMIN_UPLOAD_BODY_LIMIT` | 否 | Next Server Actions 请求体上限，默认 `100mb`。 |
 | `NODE_ENV` | 否 | `development`、`test` 或 `production`。 |
@@ -163,6 +164,7 @@ ADMIN_USERNAME="admin"
 ADMIN_PASSWORD="换成至少12位强密码"
 SECRET_PEPPER="换成至少32位随机字符串"
 APP_BASE_URL="https://你的域名"
+APP_PORT="3000"
 NODE_ENV="production"
 ```
 
@@ -193,10 +195,10 @@ docker compose logs -f app
 8. 配置 HTTPS 反向代理，把生产域名转发到：
 
 ```text
-http://127.0.0.1:3000
+http://127.0.0.1:${APP_PORT}
 ```
 
-应用默认暴露在宿主机 `3000` 端口，不要直接暴露 PostgreSQL。后续升级时执行：
+应用容器内部固定监听 `3000`，宿主机端口由 `.env` 里的 `APP_PORT` 控制；不要直接暴露 PostgreSQL。后续升级时执行：
 
 ```bash
 git pull
