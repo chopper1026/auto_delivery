@@ -22,11 +22,12 @@ const mockedReleaseDownloadClaim = vi.mocked(releaseDownloadClaim);
 const mockedConsumeRateLimit = vi.mocked(consumeRateLimit);
 const tmp = path.join(process.cwd(), ".tmp-download-route-test");
 
-function downloadRequest() {
-  return new Request("https://example.test/api/download/receipt-token", {
+function downloadRequest(url = "https://example.test/api/download/receipt-token", headers?: HeadersInit) {
+  return new Request(url, {
     headers: {
       "user-agent": "vitest",
       "x-forwarded-for": "127.0.0.1",
+      ...headers,
     },
   }) as NextRequest;
 }
@@ -47,13 +48,28 @@ describe("download route", () => {
     const response = await GET(downloadRequest(), { params: Promise.resolve({ token: "receipt-token" }) });
 
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://example.test/download/already-downloaded?receipt=receipt-token");
+    expect(response.headers.get("location")).toBe("/download/already-downloaded?receipt=receipt-token");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(mockedClaimDownload).toHaveBeenCalledWith({
       receiptToken: "receipt-token",
       ipAddress: "127.0.0.1",
       userAgent: "vitest",
     });
+  });
+
+  it("does not leak the internal bind host when redirecting behind a reverse proxy", async () => {
+    mockedClaimDownload.mockResolvedValueOnce({ result: "ALREADY_DOWNLOADED" });
+
+    const response = await GET(
+      downloadRequest("https://0.0.0.0:3000/api/download/receipt-token", {
+        "x-forwarded-host": "cardkey.mantake.shop",
+        "x-forwarded-proto": "https",
+      }),
+      { params: Promise.resolve({ token: "receipt-token" }) },
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/download/already-downloaded?receipt=receipt-token");
   });
 
   it("returns 429 before claiming when the public download rate limit is exhausted", async () => {

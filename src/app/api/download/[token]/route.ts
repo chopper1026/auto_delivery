@@ -132,11 +132,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return noStoreResponse("Not found", { status: 404 });
     case "ALREADY_DOWNLOADED":
       {
-        const redirectUrl = new URL("/download/already-downloaded", request.url);
-        redirectUrl.searchParams.set("receipt", token);
+        const redirectUrl = `/download/already-downloaded?${new URLSearchParams({ receipt: token })}`;
         return noStoreResponse(null, {
           status: 303,
-          headers: { Location: redirectUrl.toString() },
+          headers: { Location: redirectUrl },
         });
       }
     case "ERROR":
