@@ -8,6 +8,9 @@ const adminUploadBodyLimit = (process.env.ADMIN_UPLOAD_BODY_LIMIT || "100mb") as
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  images: {
+    unoptimized: true,
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: adminUploadBodyLimit,

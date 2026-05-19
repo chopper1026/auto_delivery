@@ -6,7 +6,17 @@ RUN npm ci
 FROM node:24-alpine AS migrate-deps
 WORKDIR /migrate
 RUN printf '%s\n' '{"private":true,"dependencies":{"prisma":"7.8.0"},"overrides":{"@prisma/dev":{"@hono/node-server":"1.19.13"}}}' > package.json \
-  && npm install --omit=dev --ignore-scripts --no-audit --no-fund
+  && npm install --omit=dev --ignore-scripts --no-audit --no-fund \
+  && rm -rf \
+    node_modules/@electric-sql \
+    node_modules/@hono \
+    node_modules/@img \
+    node_modules/@kurkle \
+    node_modules/aws-ssl-profiles \
+    node_modules/chart.js \
+    node_modules/hono \
+    node_modules/mysql2 \
+    node_modules/sharp
 
 FROM node:24-alpine AS builder
 WORKDIR /app
