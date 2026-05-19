@@ -2,6 +2,27 @@ function groupEveryFour(value: string) {
   return value.match(/.{1,4}/g) ?? [];
 }
 
+export function isAllowedCardKeyInputData(data: string | null): boolean {
+  return data === null || /^[A-Za-z0-9\s-]*$/.test(data);
+}
+
+export function isAllowedCardKeyCompositionInput(input: { inputType?: string | null; isComposing?: boolean }): boolean {
+  if (input.isComposing) return false;
+  return !["insertCompositionText", "insertFromComposition", "deleteCompositionText"].includes(input.inputType ?? "");
+}
+
+export function applyCardKeyInputData(input: {
+  value: string;
+  data: string;
+  selectionStart: number | null;
+  selectionEnd: number | null;
+}): string {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  const nextValue = `${input.value.slice(0, start)}${input.data}${input.value.slice(end)}`;
+  return formatCardKeyInput(nextValue);
+}
+
 export function formatCardKeyInput(input: string): string {
   const cleaned = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!cleaned) return "";

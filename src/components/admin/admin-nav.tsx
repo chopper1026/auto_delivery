@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Boxes, ClipboardList, LayoutDashboard, LogOut, PackageCheck } from "lucide-react";
-import { motion } from "motion/react";
+import { Archive, Boxes, ClipboardList, LayoutDashboard, LogOut, PackageCheck, Settings } from "lucide-react";
 
 const items = [
   { href: "/admin", label: "工作台", icon: LayoutDashboard },
   { href: "/admin/goods", label: "库存管理", icon: Boxes },
   { href: "/admin/cards", label: "卡密管理", icon: Archive },
   { href: "/admin/logs", label: "交付日志", icon: ClipboardList },
+  { href: "/admin/settings", label: "系统设置", icon: Settings },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -56,11 +56,7 @@ export function AdminNav() {
               }`}
             >
               {active ? (
-                <motion.span
-                  layoutId="admin-nav-active"
-                  className="absolute inset-0 rounded-lg bg-[var(--primary-soft)]"
-                  transition={{ duration: 0.18 }}
-                />
+                <span className="absolute inset-0 rounded-lg bg-[var(--primary-soft)]" />
               ) : null}
               <Icon className="relative h-4 w-4" aria-hidden="true" />
               <span className="relative">{item.label}</span>

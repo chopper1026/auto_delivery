@@ -52,6 +52,7 @@ export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
   plaintextKey: string;
   keyMask: string;
   cardKeyId: string;
+  createdAt: Date;
   expiresAt: Date | null;
 }> {
   const plaintextKey = generatePlaintextCardKey();
@@ -75,7 +76,7 @@ export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
           expiresAt,
         },
       });
-      return { plaintextKey, keyMask, cardKeyId: card.id, expiresAt };
+      return { plaintextKey, keyMask, cardKeyId: card.id, createdAt: card.createdAt, expiresAt };
     }
 
     const quantity = input.fileQuantity ?? 0;
@@ -114,7 +115,7 @@ export async function generateCardKey(input: GenerateCardKeyInput): Promise<{
       },
     });
 
-    return { plaintextKey, keyMask, cardKeyId: card.id, expiresAt };
+    return { plaintextKey, keyMask, cardKeyId: card.id, createdAt: card.createdAt, expiresAt };
   });
 }
 

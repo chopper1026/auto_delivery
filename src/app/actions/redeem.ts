@@ -1,14 +1,14 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { CardKeyNotRedeemableError, redeemCardKey } from "@/lib/redemption/service";
 import { formatCardKeyInput } from "@/lib/card-key-input";
 import { getRequestMeta } from "@/lib/request-meta";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 
-export type RedeemState = {
-  error?: string;
-};
+export type RedeemState =
+  | { status?: "idle" }
+  | { status: "error"; error: string }
+  | { status: "success"; receiptHref: string };
 
 export async function redeemAction(_previousState: RedeemState, formData: FormData): Promise<RedeemState> {
   const cardKey = formatCardKeyInput(String(formData.get("cardKey") ?? ""));
@@ -22,11 +22,11 @@ export async function redeemAction(_previousState: RedeemState, formData: FormDa
   });
 
   if (!limit.allowed) {
-    return { error: "请求过于频繁，请稍后再试。" };
+    return { status: "error", error: "请求过于频繁，请稍后再试。" };
   }
 
   if (!cardKey) {
-    return { error: "请输入卡密。" };
+    return { status: "error", error: "请输入卡密。" };
   }
 
   let receiptToken: string;
@@ -39,10 +39,10 @@ export async function redeemAction(_previousState: RedeemState, formData: FormDa
     receiptToken = redeemed.receiptToken;
   } catch (error) {
     if (error instanceof CardKeyNotRedeemableError) {
-      return { error: "卡密无效、已过期或已兑换。" };
+      return { status: "error", error: "卡密无效、已过期或已兑换。" };
     }
-    return { error: "兑换失败，请稍后再试。" };
+    return { status: "error", error: "兑换失败，请稍后再试。" };
   }
 
-  redirect(`/receipt/${receiptToken}`);
+  return { status: "success", receiptHref: `/receipt/${encodeURIComponent(receiptToken)}` };
 }

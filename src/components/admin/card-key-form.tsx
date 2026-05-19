@@ -144,13 +144,14 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
   }, [pickerOpen]);
 
   async function copyGeneratedKey() {
-    if (!state.plaintextKey) return;
-    const fallbackCopied = copyWithTextareaFallback(state.plaintextKey);
+    const text = state.deliveryMessage ?? state.plaintextKey;
+    if (!text) return;
+    const fallbackCopied = copyWithTextareaFallback(text);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
     if (!navigator.clipboard?.writeText) return;
     try {
-      await navigator.clipboard.writeText(state.plaintextKey);
+      await navigator.clipboard.writeText(text);
     } catch {
       if (!fallbackCopied) setCopied(false);
     }
@@ -326,16 +327,21 @@ export function CardKeyForm({ csrfToken, goods }: { csrfToken: string; goods: Go
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.18 }}
             >
-              <p className="text-sm font-medium text-[var(--primary)]">完整卡密只显示一次</p>
+              <p className="text-sm font-medium text-[var(--primary)]">完整卡密只显示一次，可直接复制客户文案</p>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <code className="min-w-0 flex-1 break-all rounded-lg bg-[var(--surface)] px-3 py-2 font-mono text-base font-semibold text-[var(--ink)]">
                   {state.plaintextKey}
                 </code>
                 <Button type="button" variant="outline" onClick={copyGeneratedKey}>
                   {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Clipboard className="h-4 w-4" aria-hidden="true" />}
-                  {copied ? "已复制" : "复制"}
+                  {copied ? "已复制" : "复制给客户"}
                 </Button>
               </div>
+              {state.deliveryMessage ? (
+                <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--line)] bg-[var(--surface)] p-3 text-sm leading-6 text-[var(--ink)]">
+                  {state.deliveryMessage}
+                </pre>
+              ) : null}
             </motion.div>
           ) : null}
           {state.error ? (

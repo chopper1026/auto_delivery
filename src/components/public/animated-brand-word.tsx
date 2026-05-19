@@ -9,8 +9,8 @@ import styles from "./public-pages.module.css";
 
 const BRAND_WORD = "AutoDelivery";
 const brandFont = parisienne as unknown as TegakiBundle;
-const brandInkWeight = "oklch(0.64 0.17 48 / 0.62)";
-const brandGlow = "oklch(0.78 0.12 78 / 0.32)";
+const brandInkWeight = "oklch(0.56 0.15 78 / 0.7)";
+const brandGlow = "oklch(0.9 0.11 92 / 0.24)";
 const writeEase = (progress: number) => 1 - Math.pow(1 - progress, 2.8);
 const strokeEase = (progress: number) => 1 - Math.pow(1 - progress, 3.2);
 

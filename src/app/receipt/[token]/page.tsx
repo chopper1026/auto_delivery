@@ -3,6 +3,7 @@ import Image from "next/image";
 import { CheckCircle2, FileArchive, RotateCcw } from "lucide-react";
 import { CopyTextButton } from "@/components/public/copy-text-button";
 import { DownloadButton } from "@/components/public/download-button";
+import { ReceiptReturnButton } from "@/components/public/receipt-return-button";
 import styles from "@/components/public/public-pages.module.css";
 import { buttonVariants } from "@/components/ui/button";
 import { getReceiptByToken } from "@/lib/redemption/service";
@@ -138,6 +139,14 @@ export default async function ReceiptPage({ params }: { params: Promise<{ token:
                 </p>
               ) : null}
             </section>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-start">
+          {receipt.kind === "FILE" ? (
+            <ReceiptReturnButton kind="FILE" token={token} downloaded={receipt.downloaded} className="rounded-[10px]" />
+          ) : (
+            <ReceiptReturnButton kind="TEXT" className="rounded-[10px]" />
           )}
         </div>
 

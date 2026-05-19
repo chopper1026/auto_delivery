@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GoodsStatus } from "@/generated/prisma/enums";
 import { requireAdminSession } from "@/lib/admin/auth";
+import { GOODS_TABLE_COLUMN_WIDTHS } from "@/lib/admin/goods-table-ui";
 import { formatGoodsStatus, formatGoodsType } from "@/lib/display-labels";
 import { countGoods, listGoodsWithInventory } from "@/lib/goods/service";
 import { getPagination, parsePageParam } from "@/lib/pagination";
@@ -63,7 +64,14 @@ export default async function AdminGoodsPage({
             className="mt-3 max-w-2xl"
           />
         </div>
-        <Table className="min-w-[980px]">
+        <Table className="min-w-[1120px] table-fixed">
+          <colgroup>
+            <col style={{ width: `${GOODS_TABLE_COLUMN_WIDTHS.goods}%` }} />
+            <col style={{ width: `${GOODS_TABLE_COLUMN_WIDTHS.type}%` }} />
+            <col style={{ width: `${GOODS_TABLE_COLUMN_WIDTHS.status}%` }} />
+            <col style={{ width: `${GOODS_TABLE_COLUMN_WIDTHS.inventory}%` }} />
+            <col style={{ width: `${GOODS_TABLE_COLUMN_WIDTHS.actions}%` }} />
+          </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead>货物</TableHead>
@@ -82,8 +90,7 @@ export default async function AdminGoodsPage({
                       {item.type === "TEXT" ? <FileText className="h-4 w-4" aria-hidden="true" /> : <Archive className="h-4 w-4" aria-hidden="true" />}
                     </span>
                     <span className="min-w-0">
-                      <span className="block font-medium text-[var(--ink)]">{item.name}</span>
-                      {item.note ? <span className="mt-1 block max-w-[260px] truncate text-xs text-[var(--muted)]">{item.note}</span> : null}
+                      <span className="block truncate font-medium text-[var(--ink)]">{item.name}</span>
                     </span>
                   </div>
                 </TableCell>
@@ -109,6 +116,8 @@ export default async function AdminGoodsPage({
                     goodsId={item.id}
                     goodsName={item.name}
                     goodsType={item.type}
+                    goodsNote={item.note}
+                    textContent={item.textContent}
                     inventory={item.inventory}
                     usage={item.usage}
                     status={item.status}

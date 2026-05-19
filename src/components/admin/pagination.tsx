@@ -34,6 +34,7 @@ export function AdminPagination({ basePath, page, totalPages, totalItems, pageSi
       <div className="flex items-center gap-2">
         <Link
           href={page > 1 ? pageHref(basePath, page - 1, query) : pageHref(basePath, page, query)}
+          scroll={false}
           aria-disabled={page <= 1}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), page <= 1 && "pointer-events-none opacity-50")}
         >
@@ -45,6 +46,7 @@ export function AdminPagination({ basePath, page, totalPages, totalItems, pageSi
         </span>
         <Link
           href={page < totalPages ? pageHref(basePath, page + 1, query) : pageHref(basePath, page, query)}
+          scroll={false}
           aria-disabled={page >= totalPages}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), page >= totalPages && "pointer-events-none opacity-50")}
         >

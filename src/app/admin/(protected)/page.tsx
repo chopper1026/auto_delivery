@@ -32,7 +32,14 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
         {stats.fileInventory.length > 0 ? (
-          <Table>
+          <Table className="min-w-[760px] table-fixed">
+            <colgroup>
+              <col className="w-[44%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+              <col className="w-[14%]" />
+            </colgroup>
             <TableHeader>
               <TableRow>
                 <TableHead>货物</TableHead>
@@ -45,7 +52,7 @@ export default async function AdminOverviewPage() {
             <TableBody>
               {stats.fileInventory.map((item) => (
                 <TableRow key={item.goodsId}>
-                  <TableCell className="font-medium text-[var(--ink)]">{item.goodsName}</TableCell>
+                  <TableCell className="truncate font-medium text-[var(--ink)]">{item.goodsName}</TableCell>
                   <TableCell className="text-right tabular-nums">{item.total}</TableCell>
                   <TableCell className="text-right tabular-nums text-[var(--primary)]">{item.available}</TableCell>
                   <TableCell className="text-right tabular-nums">{item.reserved}</TableCell>

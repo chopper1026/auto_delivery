@@ -28,5 +28,6 @@ export async function resetDatabase() {
   await prisma.adminSession.deleteMany();
   await prisma.adminAuditLog.deleteMany();
   await prisma.rateLimitBucket.deleteMany();
+  await prisma.systemSetting.deleteMany();
   await prisma.adminUser.deleteMany();
 }

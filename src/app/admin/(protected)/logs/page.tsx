@@ -47,6 +47,7 @@ function formatAdminAction(action: string) {
     "goods.enable": "启用货物",
     "card.generate": "生成卡密",
     "card.delete": "删除卡密",
+    "settings.update_service_base_url": "更新服务地址",
   };
   return labels[action] ?? action;
 }
@@ -100,7 +101,14 @@ export default async function AdminLogsPage({
 
         {type === "redemptions" ? (
           logs.redemptions.length > 0 ? (
-            <Table>
+            <Table className="min-w-[1040px] table-fixed">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[16%]" />
+                <col className="w-[22%]" />
+                <col className="w-[16%]" />
+                <col className="w-[28%]" />
+              </colgroup>
               <TableHeader>
                 <TableRow>
                   <TableHead>时间</TableHead>
@@ -115,7 +123,7 @@ export default async function AdminLogsPage({
                   <TableRow key={log.id}>
                     <TableCell>{formatDate(log.redeemedAt)}</TableCell>
                     <TableCell className="font-mono text-[var(--ink)]">{log.cardKey.keyMask}</TableCell>
-                    <TableCell className="font-medium text-[var(--ink)]">{log.goods.name}</TableCell>
+                    <TableCell className="truncate font-medium text-[var(--ink)]">{log.goods.name}</TableCell>
                     <TableCell className="font-mono text-xs">{log.ipAddress}</TableCell>
                     <TableCell className="max-w-sm truncate text-xs">{log.userAgent}</TableCell>
                   </TableRow>
@@ -131,7 +139,15 @@ export default async function AdminLogsPage({
 
         {type === "downloads" ? (
           logs.downloads.length > 0 ? (
-            <Table>
+            <Table className="min-w-[1100px] table-fixed">
+              <colgroup>
+                <col className="w-[16%]" />
+                <col className="w-[12%]" />
+                <col className="w-[16%]" />
+                <col className="w-[20%]" />
+                <col className="w-[14%]" />
+                <col className="w-[22%]" />
+              </colgroup>
               <TableHeader>
                 <TableRow>
                   <TableHead>时间</TableHead>
@@ -150,7 +166,7 @@ export default async function AdminLogsPage({
                       <Badge variant={downloadVariant(log.result)}>{formatDownloadResult(log.result)}</Badge>
                     </TableCell>
                     <TableCell className="font-mono text-[var(--ink)]">{log.redemption?.cardKey.keyMask ?? "-"}</TableCell>
-                    <TableCell className="font-medium text-[var(--ink)]">{log.redemption?.goods.name ?? "-"}</TableCell>
+                    <TableCell className="truncate font-medium text-[var(--ink)]">{log.redemption?.goods.name ?? "-"}</TableCell>
                     <TableCell className="font-mono text-xs">{log.ipAddress}</TableCell>
                     <TableCell className="max-w-sm truncate text-xs">{log.userAgent}</TableCell>
                   </TableRow>
@@ -166,7 +182,14 @@ export default async function AdminLogsPage({
 
         {type === "admin" ? (
           logs.adminLogs.length > 0 ? (
-            <Table>
+            <Table className="min-w-[1040px] table-fixed">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[20%]" />
+                <col className="w-[18%]" />
+                <col className="w-[16%]" />
+                <col className="w-[28%]" />
+              </colgroup>
               <TableHeader>
                 <TableRow>
                   <TableHead>时间</TableHead>

@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, Archive, ChevronDown, CirclePlay, Download, PauseCircle, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Archive, ChevronDown, CirclePlay, Download, Info, PauseCircle, Trash2, Upload, X } from "lucide-react";
 import { deleteGoodsAction, disableGoodsAction, enableGoodsAction, uploadGoodsFilesAction } from "@/app/admin/(protected)/goods/actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { buildGoodsDetailSections } from "@/lib/admin/goods-table-ui";
 import { cn } from "@/lib/utils";
 
 type InventoryCounts = {
@@ -29,6 +30,8 @@ export function GoodsActions({
   goodsId,
   goodsName,
   goodsType,
+  goodsNote,
+  textContent,
   inventory,
   usage,
   status,
@@ -37,10 +40,13 @@ export function GoodsActions({
   goodsId: string;
   goodsName: string;
   goodsType: "TEXT" | "FILE";
+  goodsNote: string | null;
+  textContent: string | null;
   inventory: InventoryCounts;
   usage: UsageCounts;
   status: "ACTIVE" | "DISABLED";
 }) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -53,6 +59,7 @@ export function GoodsActions({
   const redeemedCount = inventory.redeemed;
   const hasExportableFiles = unredeemedCount > 0 || redeemedCount > 0;
   const canDelete = usage.cardKeys === 0 && usage.redemptions === 0;
+  const detailSections = buildGoodsDetailSections({ type: goodsType, note: goodsNote, textContent });
 
   function getExportMenuPosition() {
     const rect = exportButtonRef.current?.getBoundingClientRect();
@@ -166,6 +173,11 @@ export function GoodsActions({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => setDetailOpen(true)}>
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          详情
+        </Button>
+
         {isFileGoods ? (
           <>
             <Button type="button" variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
@@ -234,6 +246,40 @@ export function GoodsActions({
           删除
         </Button>
       </div>
+
+      <Dialog open={detailOpen}>
+        <DialogContent className="relative max-w-2xl">
+          <button
+            type="button"
+            onClick={() => setDetailOpen(false)}
+            className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+            aria-label="关闭"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+
+          <DialogHeader className="pr-10">
+            <DialogTitle>{goodsName}</DialogTitle>
+            <DialogDescription>{goodsType === "TEXT" ? "文本货物详情" : "文件货物详情"}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {detailSections.map((section) => (
+              <section key={section.label} className="rounded-lg border border-[var(--line)] bg-[var(--surface-panel)] p-4">
+                <h3 className="text-xs font-semibold tracking-[0.12em] text-[var(--muted-strong)]">{section.label}</h3>
+                <pre
+                  className={cn(
+                    "mt-3 max-h-[48vh] overflow-auto whitespace-pre-wrap break-words font-sans text-sm leading-6",
+                    section.empty ? "text-[var(--muted)]" : "text-[var(--ink)]",
+                  )}
+                >
+                  {section.content}
+                </pre>
+              </section>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={uploadOpen}>
         <DialogContent className="relative max-w-lg">
