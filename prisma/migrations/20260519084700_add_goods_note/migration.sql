@@ -1,1 +1,0 @@
-ALTER TABLE "Goods" ADD COLUMN "note" TEXT;
