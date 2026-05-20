@@ -13,6 +13,8 @@
 # testing
 /coverage
 /.playwright-mcp
+/playwright-report
+/test-results
 
 # local planning notes
 /docs/superpowers/
@@ -20,12 +22,9 @@
 # local worktrees
 /.worktrees/
 
-# next.js
-/.next/
-/out/
-
 # production
 /build
+/frontend/dist/
 
 # misc
 .DS_Store
@@ -45,11 +44,6 @@ yarn-error.log*
 /data
 /storage
 /storage-test
-/src/generated/prisma
-
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts

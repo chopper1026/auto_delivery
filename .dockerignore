@@ -1,9 +1,12 @@
 .git
-.next
 node_modules
+frontend/dist
 data
 storage
 coverage
+playwright-report
+test-results
+.playwright-mcp
 .env*
 .tmp-*
 Dockerfile
