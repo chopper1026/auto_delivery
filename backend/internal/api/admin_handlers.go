@@ -22,7 +22,7 @@ type loginRequest struct {
 }
 
 func (a *App) handleAdminLogin(c *gin.Context) {
-	if !a.consumeRateLimit(c.Request.Context(), "admin-login", clientIP(c), 10, 15*time.Minute) {
+	if !a.consumeRateLimit(c.Request.Context(), "admin-login", a.clientIP(c), 10, 15*time.Minute) {
 		jsonError(c, http.StatusTooManyRequests, "too many login attempts")
 		return
 	}
@@ -58,7 +58,7 @@ func (a *App) handleAdminLogin(c *gin.Context) {
 	_, err = a.db.Exec(c.Request.Context(), `
 		INSERT INTO admin_sessions (token_hash, csrf_token_hash, admin_user_id, ip_address, user_agent, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
-	`, security.LookupHash(token, a.cfg.SecretPepper), security.LookupHash(csrfToken, a.cfg.SecretPepper), adminID, clientIP(c), userAgent(c), expiresAt)
+	`, security.LookupHash(token, a.cfg.SecretPepper), security.LookupHash(csrfToken, a.cfg.SecretPepper), adminID, a.clientIP(c), userAgent(c), expiresAt)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "failed to create session")
 		return
@@ -71,9 +71,13 @@ func (a *App) handleAdminLogin(c *gin.Context) {
 		Expires:  expiresAt,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   strings.HasPrefix(a.cfg.AppBaseURL, "https://"),
+		Secure:   a.secureCookies(),
 	})
 	c.JSON(http.StatusOK, gin.H{"admin": gin.H{"id": adminID, "username": username}, "csrfToken": csrfToken})
+}
+
+func (a *App) secureCookies() bool {
+	return a.cfg.ForceSecureCookies || strings.HasPrefix(a.cfg.AppBaseURL, "https://")
 }
 
 func (a *App) handleAdminSession(c *gin.Context) {
@@ -97,7 +101,7 @@ func (a *App) handleAdminSession(c *gin.Context) {
 func (a *App) handleAdminLogout(c *gin.Context) {
 	token, _ := c.Cookie(a.cfg.SessionCookieName)
 	_, _ = a.db.Exec(c.Request.Context(), `DELETE FROM admin_sessions WHERE token_hash = $1`, security.LookupHash(token, a.cfg.SecretPepper))
-	http.SetCookie(c.Writer, &http.Cookie{Name: a.cfg.SessionCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(c.Writer, &http.Cookie{Name: a.cfg.SessionCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: a.secureCookies()})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -110,8 +114,12 @@ func (a *App) handleOverview(c *gin.Context) {
 	c.JSON(http.StatusOK, overview)
 }
 
+func activeCardKeysWhereClause() string {
+	return "status = 'ACTIVE' AND (expires_at IS NULL OR expires_at >= now())"
+}
+
 func expiredCardKeysWhereClause() string {
-	return "(status = 'EXPIRED' OR (status = 'ACTIVE' AND expires_at < now()))"
+	return "status = 'EXPIRED' OR (status = 'ACTIVE' AND expires_at < now())"
 }
 
 func startOfLocalDay(now time.Time) time.Time {
@@ -136,7 +144,7 @@ func (a *App) loadOverview(ctx context.Context, now time.Time) (OverviewResponse
 	if err != nil {
 		return OverviewResponse{}, err
 	}
-	activeCardKeys, err := queryInt(ctx, a.db, `SELECT count(*) FROM card_keys WHERE status = 'ACTIVE'`)
+	activeCardKeys, err := queryInt(ctx, a.db, `SELECT count(*) FROM card_keys WHERE `+activeCardKeysWhereClause())
 	if err != nil {
 		return OverviewResponse{}, err
 	}
@@ -160,11 +168,11 @@ func (a *App) loadOverview(ctx context.Context, now time.Time) (OverviewResponse
 	if err != nil {
 		return OverviewResponse{}, err
 	}
-	redemptionTimes, err := a.loadRedemptionTimes(ctx, trendStart)
+	redemptionCounts, err := a.loadRedemptionTrendCounts(ctx, trendStart)
 	if err != nil {
 		return OverviewResponse{}, err
 	}
-	downloadTimes, err := a.loadSuccessfulDownloadTimes(ctx, trendStart)
+	downloadCounts, err := a.loadSuccessfulDownloadTrendCounts(ctx, trendStart)
 	if err != nil {
 		return OverviewResponse{}, err
 	}
@@ -178,7 +186,7 @@ func (a *App) loadOverview(ctx context.Context, now time.Time) (OverviewResponse
 		TodaysDownloads:   todaysDownloads,
 		FileInventory:     fileInventory,
 		CardKeyStatus:     buildCardKeyStatusDistribution(activeCardKeys, redeemedCardKeys, expiredCardKeys),
-		DeliveryTrend:     buildDeliveryTrendDays(now, redemptionTimes, downloadTimes),
+		DeliveryTrend:     buildDeliveryTrendDays(now, redemptionCounts, downloadCounts),
 	}, nil
 }
 
@@ -210,36 +218,56 @@ func (a *App) loadFileInventory(ctx context.Context) ([]FileInventoryStat, error
 	return items, rows.Err()
 }
 
-func (a *App) loadRedemptionTimes(ctx context.Context, since time.Time) ([]time.Time, error) {
-	rows, err := a.db.Query(ctx, `SELECT redeemed_at FROM redemptions WHERE redeemed_at >= $1`, since)
+func redemptionTrendQuery() string {
+	return `
+		SELECT date_trunc('day', redeemed_at AT TIME ZONE 'UTC')::date AS day, count(*)::int
+		FROM redemptions
+		WHERE redeemed_at >= $1
+		GROUP BY day
+	`
+}
+
+func successfulDownloadTrendQuery() string {
+	return `
+		SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS day, count(*)::int
+		FROM download_logs
+		WHERE result = 'SUCCESS' AND created_at >= $1
+		GROUP BY day
+	`
+}
+
+func (a *App) loadRedemptionTrendCounts(ctx context.Context, since time.Time) (map[string]int, error) {
+	rows, err := a.db.Query(ctx, redemptionTrendQuery(), since)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var values []time.Time
+	values := map[string]int{}
 	for rows.Next() {
-		var value time.Time
-		if err := rows.Scan(&value); err != nil {
+		var day time.Time
+		var count int
+		if err := rows.Scan(&day, &count); err != nil {
 			return nil, err
 		}
-		values = append(values, value)
+		values[day.Format("2006-01-02")] = count
 	}
 	return values, rows.Err()
 }
 
-func (a *App) loadSuccessfulDownloadTimes(ctx context.Context, since time.Time) ([]time.Time, error) {
-	rows, err := a.db.Query(ctx, `SELECT created_at FROM download_logs WHERE result = 'SUCCESS' AND created_at >= $1`, since)
+func (a *App) loadSuccessfulDownloadTrendCounts(ctx context.Context, since time.Time) (map[string]int, error) {
+	rows, err := a.db.Query(ctx, successfulDownloadTrendQuery(), since)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var values []time.Time
+	values := map[string]int{}
 	for rows.Next() {
-		var value time.Time
-		if err := rows.Scan(&value); err != nil {
+		var day time.Time
+		var count int
+		if err := rows.Scan(&day, &count); err != nil {
 			return nil, err
 		}
-		values = append(values, value)
+		values[day.Format("2006-01-02")] = count
 	}
 	return values, rows.Err()
 }
@@ -269,27 +297,18 @@ func startOfUTCDay(value time.Time) time.Time {
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
-func buildDeliveryTrendDays(now time.Time, redemptions []time.Time, downloads []time.Time) []DeliveryTrendDay {
+func buildDeliveryTrendDays(now time.Time, redemptions map[string]int, downloads map[string]int) []DeliveryTrendDay {
 	today := startOfUTCDay(now)
 	buckets := make([]DeliveryTrendDay, 0, 7)
-	byKey := map[string]int{}
 	for index := 6; index >= 0; index-- {
 		day := today.AddDate(0, 0, -index)
 		key := day.Format("2006-01-02")
-		byKey[key] = len(buckets)
-		buckets = append(buckets, DeliveryTrendDay{DateKey: key, Label: key[5:]})
-	}
-	for _, redeemedAt := range redemptions {
-		key := startOfUTCDay(redeemedAt).Format("2006-01-02")
-		if index, ok := byKey[key]; ok {
-			buckets[index].Redemptions++
-		}
-	}
-	for _, downloadedAt := range downloads {
-		key := startOfUTCDay(downloadedAt).Format("2006-01-02")
-		if index, ok := byKey[key]; ok {
-			buckets[index].Downloads++
-		}
+		buckets = append(buckets, DeliveryTrendDay{
+			DateKey:     key,
+			Label:       key[5:],
+			Redemptions: redemptions[key],
+			Downloads:   downloads[key],
+		})
 	}
 	return buckets
 }
@@ -538,7 +557,7 @@ func (a *App) handleUpdateSettings(c *gin.Context) {
 			return
 		}
 	}
-	a.writeAudit(c.Request.Context(), admin.ID, "settings.update", "SystemSetting", "", clientIP(c), userAgent(c), "")
+	a.writeAudit(c.Request.Context(), admin.ID, "settings.update", "SystemSetting", "", a.clientIP(c), userAgent(c), "")
 	settings, err := a.loadSettings(c.Request.Context())
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "failed to load settings")
@@ -547,7 +566,7 @@ func (a *App) handleUpdateSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, settings)
 }
 
-const defaultDeliveryMessageTemplate = "兑换地址：{{redeemUrl}}\n卡密：{{cardKey}}\n创建时间：{{createdAt}}\n到期时间：{{expiresAt}}\n\n注意事项：\n1. 一个卡密只能兑换一次，请勿转发给无关人员。\n2. 兑换完成后请及时保存收货页面内容或下载文件。\n3. 因个人原因未及时保存导致的损失不予处理。"
+const defaultDeliveryMessageTemplate = "卡密：{{cardKey}}\n兑换地址：{{redeemUrl}}\n创建时间：{{createdAt}}\n过期时间：{{expiresAt}}\n\n注意事项：卡密仅可兑换一次，请在有效期内及时兑换，兑换后立刻保存，过期或自身未保存导致的损失自负。"
 
 type settingsResponse struct {
 	ServiceBaseURL          string `json:"serviceBaseUrl"`

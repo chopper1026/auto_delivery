@@ -73,4 +73,23 @@ func TestDownloadClaimReleaseIntegration(t *testing.T) {
 	if secondClaim.claimToken == "" || secondClaim.claimToken == firstClaim.claimToken {
 		t.Fatalf("second claim token = %q, first = %q", secondClaim.claimToken, firstClaim.claimToken)
 	}
+
+	_, err = pool.Exec(t.Context(), `
+		UPDATE redemptions
+		SET download_state = 'IN_PROGRESS',
+		    download_claim_token_hash = 'expired',
+		    download_claim_expires_at = now() - interval '1 minute'
+		WHERE id = $1
+	`, redemptionID)
+	if err != nil {
+		t.Fatalf("expire claim: %v", err)
+	}
+
+	expiredRecovered, err := app.claimDownload(t.Context(), receiptToken, "127.0.0.1", "integration-test")
+	if err != nil {
+		t.Fatalf("expired claim should be reusable: %v", err)
+	}
+	if expiredRecovered.claimToken == "" {
+		t.Fatal("expected recovered claim token")
+	}
 }

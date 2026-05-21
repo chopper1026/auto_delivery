@@ -1,32 +1,37 @@
-import { Archive, Boxes, ClipboardList, LayoutDashboard, PackageCheck, Settings } from "lucide-react";
+import { ExternalLink, LogOut, PackageCheck } from "lucide-react";
 import { Link, NavLink } from "react-router-dom";
 import { cn } from "../../lib/utils";
+import { AnimatedBrandWord } from "../public/AnimatedBrandWord";
+import { Button, buttonVariants } from "../ui/button";
+import { adminNavItems } from "./adminNavigation";
 
-const items = [
-  { href: "/admin", label: "工作台", icon: LayoutDashboard, end: true },
-  { href: "/admin/goods", label: "货物", icon: Boxes },
-  { href: "/admin/cards", label: "卡密", icon: Archive },
-  { href: "/admin/logs", label: "日志", icon: ClipboardList },
-  { href: "/admin/settings", label: "设置", icon: Settings },
-];
+type AdminNavProps = {
+  onLogout: () => void;
+  logoutPending?: boolean;
+};
 
-export function AdminNav() {
+export function AdminNav({ onLogout, logoutPending = false }: AdminNavProps) {
   return (
-    <aside className="z-30 border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:px-5 lg:py-5">
+    <aside
+      aria-label="管理导航"
+      className="z-30 flex flex-col border-b border-[var(--line)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur lg:fixed lg:inset-y-0 lg:left-0 lg:w-64 lg:border-b-0 lg:border-r lg:px-5 lg:py-5"
+    >
       <div className="flex items-center justify-between gap-4 lg:block">
         <Link to="/admin" className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--ink)] text-[var(--primary-foreground)]">
             <PackageCheck className="h-5 w-5" aria-hidden="true" />
           </span>
-          <div>
-            <p className="brand-script text-[26px] font-bold leading-none text-[var(--primary)]">AutoDelivery</p>
-            <h1 className="mt-0.5 text-xs font-medium leading-4 text-[var(--ink)]">管理控制台</h1>
+          <div className="min-w-0">
+            <p className="flex text-[22px] font-bold leading-none text-[var(--primary)]">
+              <AnimatedBrandWord className="brand-script admin-sidebar-brand-word" />
+            </p>
+            <p className="mt-1 text-xs font-medium leading-4 text-[var(--ink)]">管理控制台</p>
           </div>
         </Link>
       </div>
 
-      <nav className="mt-3 flex gap-1 overflow-x-auto pb-1 lg:mt-8 lg:flex-col lg:overflow-visible lg:pb-0">
-        {items.map((item) => {
+      <nav aria-label="管理模块" className="mt-3 flex gap-1 overflow-x-auto pb-1 lg:mt-8 lg:flex-col lg:overflow-visible lg:pb-0">
+        {adminNavItems.map((item) => {
           const Icon = item.icon;
 
           return (
@@ -52,6 +57,17 @@ export function AdminNav() {
           );
         })}
       </nav>
+
+      <div aria-label="快捷操作" className="mt-3 flex gap-2 border-t border-[var(--line)] pt-3 lg:mt-auto lg:grid lg:gap-2">
+        <a href="/" target="_blank" rel="noreferrer" className={buttonVariants({ variant: "outline", className: "justify-start text-sm lg:w-full" })}>
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          打开兑换页
+        </a>
+        <Button type="button" variant="outline" onClick={onLogout} disabled={logoutPending} className="justify-start text-sm lg:w-full">
+          <LogOut className="h-4 w-4" aria-hidden="true" />
+          {logoutPending ? "退出中" : "退出登录"}
+        </Button>
+      </div>
     </aside>
   );
 }

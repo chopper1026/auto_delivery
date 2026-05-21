@@ -17,38 +17,52 @@ Auto Delivery 是一个卡密自动发货系统。用户无需登录，输入卡
 npm install
 ```
 
-2. 启动 Postgres 和 Redis：
-
-```bash
-docker compose up -d postgres redis
-```
-
-3. 配置环境变量：
+2. 配置环境变量：
 
 ```bash
 cp .env.example .env
 ```
 
-4. 构建前端静态资源并启动 Go 服务：
+3. 如果需要 Docker 里的 Postgres，先启动数据库：
 
 ```bash
-npm run build
-set -a && source .env && set +a
-cd backend
-go run ./cmd/server
+npm run dev:db
+```
+
+4. 启动后端。默认会连接 `.env` 中配置的 Postgres 和 Redis，并运行 Go 服务：
+
+```bash
+npm run dev:backend
+```
+
+如果你想用 Docker Compose 启动 Postgres 和 Redis，再运行后端：
+
+```bash
+npm run dev:backend:docker
+```
+
+5. 另开一个终端启动前端：
+
+```bash
+npm run dev
 ```
 
 访问地址：
 
-- 用户兑换页：`http://localhost:3000`
-- 管理后台：`http://localhost:3000/admin`
+- 前端开发服务：`http://localhost:5173`
+- 管理后台登录页：`http://localhost:5173/admin/login`
+- Go API：`http://localhost:3000`
 
 Go 服务启动时会自动执行内嵌数据库迁移，并在没有管理员时创建初始管理员。
+管理员文件上传请求体默认限制为 `ADMIN_UPLOAD_BODY_LIMIT_BYTES=104857600`，生产环境可按机器内存和反向代理限制调整。
 
 ## 常用命令
 
 ```bash
 npm run dev          # Vite 前端开发服务器，/api 代理到 localhost:3000
+npm run dev:db       # 只启动 Docker Postgres，不启动 Redis
+npm run dev:backend  # 使用本机 Postgres/Redis 运行 Go/Gin 后端
+npm run dev:backend:docker  # 先用 Docker Compose 启动 Postgres/Redis，再运行后端
 npm run build        # 构建 React 静态资源到 frontend/dist
 npm run test         # 前端单元测试
 npm run typecheck    # 前端类型检查
@@ -57,8 +71,9 @@ npm run e2e          # Playwright 浏览器端到端测试
 cd backend
 go test ./...        # 后端单元测试
 TEST_DATABASE_URL='postgresql://auto_delivery:<password>@localhost:5432/auto_delivery_test?sslmode=disable' go test ./internal/api -run Integration
-go run ./cmd/server  # 启动 Go/Gin 服务
 ```
+
+完整回归命令见 [docs/verification.md](docs/verification.md)。
 
 ## Docker 部署
 

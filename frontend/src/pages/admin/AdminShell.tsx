@@ -1,16 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, LogOut } from "lucide-react";
-import { Link, Navigate, Outlet, useNavigate } from "react-router-dom";
+import { UserRound } from "lucide-react";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, clearCsrfToken, setCsrfToken } from "../../api";
 import { AdminNav } from "../../components/admin/AdminNav";
+import { getAdminPageTitle } from "../../components/admin/adminNavigation";
 import { Centered } from "../../components/Centered";
-import { Button } from "../../components/ui/button";
 import { useEffect } from "react";
 
 export function AdminShell() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const pageTitle = getAdminPageTitle(location.pathname);
   const logout = useMutation({
     mutationFn: api.logout,
     onSettled: () => {
@@ -29,24 +31,19 @@ export function AdminShell() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--ink)]">
-      <AdminNav />
+      <AdminNav onLogout={() => logout.mutate()} logoutPending={logout.isPending} />
       <main className="min-w-0 px-4 py-5 sm:px-6 lg:ml-64 lg:px-8 lg:py-6">
-        <div className="mb-5 flex flex-col gap-3 border-b border-[var(--line)] pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <header aria-label="管理顶栏" className="mb-5 flex flex-col gap-3 border-b border-[var(--line)] pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold tracking-[0.16em] text-[var(--muted)]">当前管理员</p>
-            <strong className="mt-1 block text-sm text-[var(--ink)]">{session.data?.admin.username}</strong>
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)]">{pageTitle}</h1>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link className="secondary" to="/">
-              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-              打开兑换页
-            </Link>
-            <Button type="button" variant="outline" onClick={() => logout.mutate()} disabled={logout.isPending}>
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              {logout.isPending ? "退出中" : "退出登录"}
-            </Button>
+          <div aria-label="管理员账号" className="flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 shadow-[var(--shadow)]">
+            <span data-testid="default-admin-avatar" className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
+              <UserRound className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <strong className="pr-1 text-sm font-semibold text-[var(--ink)]">{session.data?.admin.username}</strong>
           </div>
-        </div>
+        </header>
         <Outlet />
       </main>
     </div>

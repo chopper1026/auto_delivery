@@ -14,6 +14,8 @@ services:
       retries: 5
     volumes:
       - ./data/postgres:/var/lib/postgresql
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
 
   redis:
     image: redis:8.6.3-alpine

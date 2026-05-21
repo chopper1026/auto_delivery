@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/testutil"
 )
 
@@ -63,6 +64,57 @@ func TestGoodsExportAuditAction(t *testing.T) {
 	}
 	if got := goodsExportAuditAction("REDEEMED"); got != "goods.export_redeemed" {
 		t.Fatalf("REDEEMED action = %q", got)
+	}
+}
+
+func TestGoodsListPreAggregatesMultipliedJoinCountsIntegration(t *testing.T) {
+	pool := testutil.OpenTestDB(t)
+	defer pool.Close()
+	app := newIntegrationApp(t, pool)
+
+	var goodsID string
+	if err := pool.QueryRow(t.Context(), `
+		INSERT INTO goods (name, type, note)
+		VALUES ('库存计数文件包', 'FILE', 'count test')
+		RETURNING id::text
+	`).Scan(&goodsID); err != nil {
+		t.Fatalf("insert goods: %v", err)
+	}
+	for _, name := range []string{"first.json", "second.json"} {
+		if _, err := pool.Exec(t.Context(), `
+			INSERT INTO goods_files (goods_id, original_name, stored_name, storage_path, size_bytes, mime_type, sha256)
+			VALUES ($1, $2, $2, '/tmp/' || $2, 1, 'application/json', $2)
+		`, goodsID, name); err != nil {
+			t.Fatalf("insert goods file: %v", err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		var cardID string
+		cardKey := "goods-count-card-" + string(rune('a'+i))
+		if err := pool.QueryRow(t.Context(), `
+			INSERT INTO card_keys (key_hash, key_mask, goods_id, goods_type, status, redeemed_at)
+			VALUES ($1, $2, $3, 'FILE', 'REDEEMED', now())
+			RETURNING id::text
+		`, security.LookupHash(cardKey, app.cfg.SecretPepper), "AD-****-****-****-CNT"+string(rune('A'+i)), goodsID).Scan(&cardID); err != nil {
+			t.Fatalf("insert card key: %v", err)
+		}
+		if _, err := pool.Exec(t.Context(), `
+			INSERT INTO redemptions (card_key_id, goods_id, receipt_token_hash, receipt_token_mask, ip_address, user_agent)
+			VALUES ($1, $2, $3, $4, '127.0.0.1', 'integration-test')
+		`, cardID, goodsID, security.LookupHash("goods-count-receipt-"+string(rune('a'+i)), app.cfg.SecretPepper), "receipt-"+string(rune('a'+i))); err != nil {
+			t.Fatalf("insert redemption: %v", err)
+		}
+	}
+
+	payload, err := app.listGoods(t.Context(), goodsListParams{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("list goods: %v", err)
+	}
+	if len(payload.Items) == 0 {
+		t.Fatal("expected goods item")
+	}
+	if got, want := payload.Items[0].Inventory.Total, 2; got != want {
+		t.Fatalf("inventory total = %d, want %d", got, want)
 	}
 }
 

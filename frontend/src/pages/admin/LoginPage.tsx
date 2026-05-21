@@ -7,6 +7,7 @@ import { api, setCsrfToken } from "../../api";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { AnimatedBrandWord } from "../../components/public/AnimatedBrandWord";
 import { cn } from "../../lib/utils";
 import styles from "./login.module.css";
 
@@ -43,7 +44,9 @@ export function LoginPage() {
                 <PackageCheck className="h-6 w-6" aria-hidden="true" />
               </span>
               <div className={styles.brand}>
-                <h1 className="brand-script mt-4 text-[34px] font-bold leading-none text-[var(--primary)]">AutoDelivery</h1>
+                <h1 className={cn(styles.brandHeading, "flex justify-center text-[34px] font-bold leading-none text-[var(--primary)]")}>
+                  <AnimatedBrandWord className={cn(styles.brandWord, "brand-script")} />
+                </h1>
                 <p className="mt-2 text-sm font-semibold text-[var(--muted-strong)]">管理控制台</p>
               </div>
             </div>
@@ -62,7 +65,7 @@ export function LoginPage() {
                     required
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
-                    className="h-11 bg-[color-mix(in_oklch,var(--surface)_92%,var(--surface-muted))] pl-10 transition-[border-color,box-shadow,background-color] duration-200"
+                    className={cn(styles.iconInput, "h-11 bg-[color-mix(in_oklch,var(--surface)_92%,var(--surface-muted))] transition-[border-color,box-shadow,background-color] duration-200")}
                   />
                 </div>
               </div>
@@ -81,7 +84,7 @@ export function LoginPage() {
                     required
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="h-11 bg-[color-mix(in_oklch,var(--surface)_92%,var(--surface-muted))] pl-10 transition-[border-color,box-shadow,background-color] duration-200"
+                    className={cn(styles.iconInput, "h-11 bg-[color-mix(in_oklch,var(--surface)_92%,var(--surface-muted))] transition-[border-color,box-shadow,background-color] duration-200")}
                   />
                 </div>
               </div>

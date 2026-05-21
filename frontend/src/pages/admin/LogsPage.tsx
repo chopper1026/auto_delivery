@@ -3,7 +3,6 @@ import { Search } from "lucide-react";
 import { type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
-import { PageTitle } from "../../components/admin/PageTitle";
 import { Badge, type BadgeProps } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -75,29 +74,27 @@ export function LogsPage() {
 
   return (
     <section className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-[var(--line)] pb-5 md:flex-row md:items-end md:justify-between">
-        <PageTitle title="交付日志" description="按兑换、下载和后台操作查看系统记录。" />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--surface)] p-1">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.type}
+              to={tabHref(tab.type, query)}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                type === tab.type ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]",
+              )}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </div>
         <form className="flex w-full max-w-md gap-2 md:justify-end" onSubmit={submit}>
           <Input name="q" defaultValue={query} placeholder="搜索 IP、UA、动作" className="min-w-0" />
           <Button type="submit" variant="outline" size="icon" aria-label="搜索">
             <Search className="h-4 w-4" aria-hidden="true" />
           </Button>
         </form>
-      </header>
-
-      <div className="inline-flex rounded-lg border border-[var(--line)] bg-[var(--surface)] p-1">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.type}
-            to={tabHref(tab.type, query)}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition",
-              type === tab.type ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]",
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
       </div>
 
       <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">

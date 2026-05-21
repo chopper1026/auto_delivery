@@ -8,7 +8,7 @@ async function loginAdmin(page: Page) {
   await page.getByLabel("密码").fill("test1234567890");
   await page.getByRole("button", { name: /进入控制台/ }).click();
   await page.waitForURL("**/admin");
-  await expect(page.getByText("当前管理员")).toBeVisible();
+  await expect(page.getByLabel("管理员账号")).toBeVisible();
 }
 
 async function openGoodsPicker(page: Page, goodsName: string) {

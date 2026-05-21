@@ -40,8 +40,8 @@ func New(cfg config.Config, db *pgxpool.Pool, redisClient *redis.Client) *App {
 	}
 	app := &App{cfg: cfg, db: db, redis: redisClient}
 	router := gin.New()
-	router.Use(gin.Logger(), gin.Recovery())
-	router.MaxMultipartMemory = storage.MaxUploadBytes
+	router.Use(gin.Logger(), gin.Recovery(), securityHeaders(), maxRequestBody(app.cfg.UploadBodyLimit))
+	router.MaxMultipartMemory = minPositiveInt64(app.cfg.UploadBodyLimit, storage.MaxUploadBytes)
 
 	api := router.Group("/api")
 	api.POST("/public/redeem", app.handleRedeem)
@@ -56,6 +56,7 @@ func New(cfg config.Config, db *pgxpool.Pool, redisClient *redis.Client) *App {
 	admin.DELETE("/session", app.handleAdminLogout)
 	admin.GET("/overview", app.handleOverview)
 	admin.GET("/goods", app.handleListGoods)
+	admin.GET("/goods/card-options", app.handleCardGoodsOptions)
 	admin.POST("/goods", app.handleCreateGoods)
 	admin.PATCH("/goods/:id", app.handleUpdateGoods)
 	admin.DELETE("/goods/:id", app.handleDeleteGoods)
@@ -81,7 +82,10 @@ func (a *App) Handler() http.Handler {
 }
 
 func (a *App) mountStatic(router *gin.Engine) {
-	staticDir := a.cfg.StaticDir
+	staticDir, err := filepath.Abs(a.cfg.StaticDir)
+	if err != nil {
+		staticDir = a.cfg.StaticDir
+	}
 	router.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
@@ -91,7 +95,16 @@ func (a *App) mountStatic(router *gin.Engine) {
 		if requestPath == "." {
 			requestPath = "index.html"
 		}
-		candidate := filepath.Join(staticDir, requestPath)
+		candidate, err := filepath.Abs(filepath.Join(staticDir, requestPath))
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		rel, err := filepath.Rel(staticDir, candidate)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			c.Status(http.StatusNotFound)
+			return
+		}
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			c.File(candidate)
 			return
@@ -123,9 +136,12 @@ func (a *App) EnsureInitialAdmin(ctx context.Context) error {
 	return err
 }
 
-func clientIP(c *gin.Context) string {
-	if forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); forwarded != "" {
-		return strings.TrimSpace(strings.Split(forwarded, ",")[0])
+func (a *App) clientIP(c *gin.Context) string {
+	if forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); forwarded != "" && isTrustedProxy(c.Request.RemoteAddr, a.cfg.TrustedProxyCIDRs) {
+		return firstForwardedFor(forwarded)
+	}
+	if direct := remoteAddrHost(c.Request.RemoteAddr); direct != "" {
+		return direct
 	}
 	return c.ClientIP()
 }
@@ -229,4 +245,14 @@ func parsePositiveInt(value string, fallback int, max int) int {
 		return fallback
 	}
 	return int(math.Min(float64(n), float64(max)))
+}
+
+func minPositiveInt64(a int64, b int64) int64 {
+	if a <= 0 {
+		return b
+	}
+	if b <= 0 || a < b {
+		return a
+	}
+	return b
 }

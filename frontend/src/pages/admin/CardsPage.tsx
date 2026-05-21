@@ -44,7 +44,7 @@ export function CardsPage() {
   const status = parseCardStatus(searchParams.get("status"));
   const statusParam = status ?? "";
   const page = parsePage(searchParams.get("page"));
-  const goods = useQuery({ queryKey: ["goods", "card-form"], queryFn: () => api.goods({ pageSize: 100 }) });
+  const goods = useQuery({ queryKey: ["goods", "card-options", ""], queryFn: () => api.cardGoodsOptions({ limit: 200 }) });
   const cards = useQuery({
     queryKey: ["cardKeys", query, statusParam, page],
     queryFn: () => api.cardKeys({ q: query, status, page }),
@@ -58,12 +58,6 @@ export function CardsPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-[var(--line)] pb-5 md:flex-row md:items-end">
-        <div>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--ink)]">卡密管理</h2>
-        </div>
-      </header>
-
       <CardKeyForm goods={goodsOptions} />
 
       <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">

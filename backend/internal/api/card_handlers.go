@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"auto_delivery/backend/internal/security"
+	"auto_delivery/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -52,7 +53,7 @@ func (a *App) handleGenerateCardKey(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	a.writeAudit(c.Request.Context(), admin.ID, "card_key.generate", "CardKey", result.ID, clientIP(c), userAgent(c), "")
+	a.writeAudit(c.Request.Context(), admin.ID, "card_key.generate", "CardKey", result.ID, a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusCreated, result)
 }
 
@@ -90,7 +91,7 @@ func (a *App) handleDeleteCardKey(c *gin.Context) {
 		jsonError(c, http.StatusInternalServerError, "failed to delete card key")
 		return
 	}
-	a.writeAudit(c.Request.Context(), admin.ID, "card_key.delete", "CardKey", c.Param("id"), clientIP(c), userAgent(c), "")
+	a.writeAudit(c.Request.Context(), admin.ID, "card_key.delete", "CardKey", c.Param("id"), a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -242,8 +243,15 @@ func buildCardKeyListWhere(params cardKeyListParams) (string, []any) {
 		conditions = append(conditions, fmt.Sprintf("(g.name ILIKE $%d OR c.key_mask ILIKE $%d)", len(args), len(args)))
 	}
 	if params.Status != "" {
-		args = append(args, params.Status)
-		conditions = append(conditions, fmt.Sprintf("c.status = $%d", len(args)))
+		switch params.Status {
+		case "ACTIVE":
+			conditions = append(conditions, "(c.status = 'ACTIVE' AND (c.expires_at IS NULL OR c.expires_at >= now()))")
+		case "EXPIRED":
+			conditions = append(conditions, "(c.status = 'EXPIRED' OR (c.status = 'ACTIVE' AND c.expires_at < now()))")
+		default:
+			args = append(args, params.Status)
+			conditions = append(conditions, fmt.Sprintf("c.status = $%d", len(args)))
+		}
 	}
 	if len(conditions) == 0 {
 		return "", args
@@ -308,22 +316,7 @@ func (a *App) listCardKeys(ctx context.Context, params cardKeyListParams) (Pagin
 }
 
 func calculateExpiresAt(option string, now time.Time) (*time.Time, error) {
-	var expires time.Time
-	switch option {
-	case "never":
-		return nil, nil
-	case "3m":
-		expires = now.Add(3 * time.Minute)
-	case "1d":
-		expires = now.AddDate(0, 0, 1)
-	case "3d":
-		expires = now.AddDate(0, 0, 3)
-	case "7d":
-		expires = now.AddDate(0, 0, 7)
-	default:
-		return nil, errors.New("invalid expiration")
-	}
-	return &expires, nil
+	return service.CalculateExpiresAt(option, now)
 }
 
 func buildDeliveryMessage(settings settingsResponse, cardKey string, expiresAt *time.Time, createdAt time.Time) string {

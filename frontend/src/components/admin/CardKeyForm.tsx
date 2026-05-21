@@ -1,10 +1,11 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Check, ChevronDown, Copy, FileText, KeyRound, Search, Wand2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api";
 import {
+  buildGoodsOptions,
   filterGoodsForCardKey,
   getInitialCardKeyGoodsId,
   isCardKeyGoodsSelectable,
@@ -62,15 +63,26 @@ export function CardKeyForm({ goods }: { goods: GoodsOption[] }) {
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
   const pickerTriggerRef = useRef<HTMLDivElement>(null);
   const pickerPanelRef = useRef<HTMLDivElement>(null);
-  const selected = useMemo(() => goods.find((item) => item.id === selectedGoodsId) ?? goods.find(isCardKeyGoodsSelectable) ?? goods[0], [goods, selectedGoodsId]);
+  const remoteGoods = useQuery({
+    queryKey: ["goods", "card-options", goodsQuery.trim()],
+    queryFn: () => api.cardGoodsOptions({ q: goodsQuery.trim(), limit: 200 }),
+    enabled: pickerOpen,
+    staleTime: 30_000,
+  });
+  const pickerGoods = useMemo(() => (remoteGoods.data ? buildGoodsOptions(remoteGoods.data.items) : goods), [goods, remoteGoods.data]);
+  const selected = useMemo(
+    () => pickerGoods.find((item) => item.id === selectedGoodsId) ?? goods.find((item) => item.id === selectedGoodsId) ?? goods.find(isCardKeyGoodsSelectable) ?? goods[0],
+    [goods, pickerGoods, selectedGoodsId],
+  );
   const selectedSelectable = selected ? isCardKeyGoodsSelectable(selected) : false;
-  const filteredGoods = useMemo(() => filterGoodsForCardKey(goods, { query: goodsQuery, filter: goodsFilter }), [goods, goodsFilter, goodsQuery]);
+  const filteredGoods = useMemo(() => filterGoodsForCardKey(pickerGoods, { query: goodsQuery, filter: goodsFilter }), [pickerGoods, goodsFilter, goodsQuery]);
   const generate = useMutation({
     mutationFn: api.generateCardKey,
     onSuccess: (result) => {
       setGenerated(result);
       queryClient.invalidateQueries({ queryKey: ["cardKeys"] });
       queryClient.invalidateQueries({ queryKey: ["goods"] });
+      queryClient.invalidateQueries({ queryKey: ["goods", "card-options"] });
     },
   });
 
@@ -247,7 +259,13 @@ export function CardKeyForm({ goods }: { goods: GoodsOption[] }) {
                   <div className="flex items-center gap-2">
                     <div className="relative min-w-0 flex-1">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" aria-hidden="true" />
-                      <Input value={goodsQuery} onChange={(event) => setGoodsQuery(event.target.value)} placeholder="搜索货物名称或备注" className="pl-9" autoFocus />
+                      <Input
+                        value={goodsQuery}
+                        onChange={(event) => setGoodsQuery(event.target.value)}
+                        placeholder="搜索货物名称或备注"
+                        className="admin-filter-search-input"
+                        autoFocus
+                      />
                     </div>
                     <Button type="button" variant="ghost" size="icon" onClick={() => setPickerOpen(false)} aria-label="关闭货物选择">
                       <X className="h-4 w-4" aria-hidden="true" />

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:db": "docker compose up -d postgres",
+    "dev:backend": "sh -c '[ -f .env ] || { echo \"Missing .env. Run: cp .env.example .env\"; exit 1; }; set -a && . ./.env && set +a && cd backend && STATIC_DIR=../frontend/dist go run ./cmd/server'",
+    "dev:backend:docker": "sh -c 'docker compose up -d postgres redis && npm run dev:backend'",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "lint": "tsc --noEmit",

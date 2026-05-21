@@ -23,7 +23,7 @@ type redeemRequest struct {
 }
 
 func (a *App) handleRedeem(c *gin.Context) {
-	if !a.consumeRateLimit(c.Request.Context(), "public-redeem", clientIP(c), 20, 15*time.Minute) {
+	if !a.consumeRateLimit(c.Request.Context(), "public-redeem", a.clientIP(c), 20, 15*time.Minute) {
 		jsonError(c, http.StatusTooManyRequests, "too many redemption attempts")
 		return
 	}
@@ -32,8 +32,12 @@ func (a *App) handleRedeem(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid redeem request")
 		return
 	}
-	result, err := a.redeemCardKey(c.Request.Context(), security.NormalizeCardKey(req.CardKey), clientIP(c), userAgent(c))
+	result, err := a.redeemCardKey(c.Request.Context(), security.NormalizeCardKey(req.CardKey), a.clientIP(c), userAgent(c))
 	if err != nil {
+		if errors.Is(err, errPrepareRedemptionFiles) {
+			jsonError(c, http.StatusInternalServerError, "failed to prepare redemption files")
+			return
+		}
 		jsonError(c, http.StatusBadRequest, "card key is not redeemable")
 		return
 	}
@@ -63,11 +67,11 @@ func (a *App) handleReceiptStatus(c *gin.Context) {
 }
 
 func (a *App) handleDownload(c *gin.Context) {
-	if !a.consumeRateLimit(c.Request.Context(), "public-download", clientIP(c), 30, 15*time.Minute) {
+	if !a.consumeRateLimit(c.Request.Context(), "public-download", a.clientIP(c), 30, 15*time.Minute) {
 		jsonError(c, http.StatusTooManyRequests, "too many download attempts")
 		return
 	}
-	claim, err := a.claimDownload(c.Request.Context(), c.Param("token"), clientIP(c), userAgent(c))
+	claim, err := a.claimDownload(c.Request.Context(), c.Param("token"), a.clientIP(c), userAgent(c))
 	if err != nil {
 		if errors.Is(err, errAlreadyDownloaded) {
 			c.Redirect(http.StatusFound, "/download/already-downloaded?receipt="+c.Param("token"))
@@ -78,14 +82,14 @@ func (a *App) handleDownload(c *gin.Context) {
 	}
 	file, err := os.Open(claim.zipPath)
 	if err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, clientIP(c), userAgent(c))
+		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		jsonError(c, http.StatusInternalServerError, "download file is missing")
 		return
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, clientIP(c), userAgent(c))
+		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		jsonError(c, http.StatusInternalServerError, "download file is missing")
 		return
 	}
@@ -93,10 +97,10 @@ func (a *App) handleDownload(c *gin.Context) {
 	c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
 	c.Header("Content-Disposition", `attachment; filename="`+claim.filename+`"`)
 	if _, err := io.Copy(c.Writer, file); err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, clientIP(c), userAgent(c))
+		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		return
 	}
-	_ = a.completeDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, clientIP(c), userAgent(c))
+	_ = a.completeDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 }
 
 type redeemResult struct {
@@ -104,41 +108,70 @@ type redeemResult struct {
 	goodsType    string
 }
 
+var errPrepareRedemptionFiles = errors.New("failed to prepare redemption files")
+
 func (a *App) redeemCardKey(ctx context.Context, cardKey string, ip string, ua string) (redeemResult, error) {
 	if !security.IsCardKey(cardKey) {
 		return redeemResult{}, errors.New("invalid card key")
 	}
-	keyHash := security.LookupHash(cardKey, a.cfg.SecretPepper)
 	receiptToken, err := security.RandomToken()
 	if err != nil {
 		return redeemResult{}, err
 	}
 	receiptTokenHash := security.LookupHash(receiptToken, a.cfg.SecretPepper)
-
-	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
+	reserved, err := a.reserveRedemption(ctx, cardKey, receiptToken, receiptTokenHash, ip, ua)
 	if err != nil {
 		return redeemResult{}, err
 	}
+	if reserved.goodsType == "FILE" {
+		if err := a.finalizeFileRedemption(ctx, reserved); err != nil {
+			_ = a.failFileRedemption(ctx, reserved)
+			return redeemResult{}, errPrepareRedemptionFiles
+		}
+	}
+	return redeemResult{receiptToken: receiptToken, goodsType: reserved.goodsType}, nil
+}
+
+type reservedFile struct {
+	id           string
+	originalName string
+	path         string
+}
+
+type reservedRedemption struct {
+	redemptionID string
+	cardID       string
+	goodsType    string
+	files        []reservedFile
+}
+
+func (a *App) reserveRedemption(ctx context.Context, cardKey string, receiptToken string, receiptTokenHash string, ip string, ua string) (reservedRedemption, error) {
+	keyHash := security.LookupHash(cardKey, a.cfg.SecretPepper)
+
+	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return reservedRedemption{}, err
+	}
 	defer tx.Rollback(ctx)
 
-	var cardID, goodsID, goodsType, goodsStatus, cardStatus, goodsName string
+	var cardID, goodsID, goodsType, goodsStatus, cardStatus string
 	var expiresAt sql.NullTime
 	err = tx.QueryRow(ctx, `
-		SELECT c.id::text, c.goods_id::text, c.goods_type::text, c.status::text, c.expires_at, g.status::text, g.name
+		SELECT c.id::text, c.goods_id::text, c.goods_type::text, c.status::text, c.expires_at, g.status::text
 		FROM card_keys c
 		JOIN goods g ON g.id = c.goods_id
 		WHERE c.key_hash = $1
 		FOR UPDATE OF c
-	`, keyHash).Scan(&cardID, &goodsID, &goodsType, &cardStatus, &expiresAt, &goodsStatus, &goodsName)
+	`, keyHash).Scan(&cardID, &goodsID, &goodsType, &cardStatus, &expiresAt, &goodsStatus)
 	if err != nil {
-		return redeemResult{}, err
+		return reservedRedemption{}, err
 	}
 	if expiresAt.Valid && expiresAt.Time.Before(time.Now()) && cardStatus == "ACTIVE" {
 		_, _ = tx.Exec(ctx, `UPDATE card_keys SET status = 'EXPIRED' WHERE id = $1`, cardID)
-		return redeemResult{}, errors.New("card key expired")
+		return reservedRedemption{}, errors.New("card key expired")
 	}
 	if cardStatus != "ACTIVE" || goodsStatus != "ACTIVE" {
-		return redeemResult{}, errors.New("card key not redeemable")
+		return reservedRedemption{}, errors.New("card key not redeemable")
 	}
 
 	var redemptionID string
@@ -148,73 +181,106 @@ func (a *App) redeemCardKey(ctx context.Context, cardKey string, ip string, ua s
 		RETURNING id::text
 	`, cardID, goodsID, receiptTokenHash, security.MaskSecret(receiptToken), ip, ua).Scan(&redemptionID)
 	if err != nil {
-		return redeemResult{}, err
+		return reservedRedemption{}, err
 	}
 
+	reserved := reservedRedemption{redemptionID: redemptionID, cardID: cardID, goodsType: goodsType}
 	if goodsType == "FILE" {
 		rows, err := tx.Query(ctx, `
 			SELECT id::text, original_name, storage_path
 			FROM goods_files
 			WHERE reserved_by_card_key_id = $1 AND status = 'RESERVED'
 			ORDER BY created_at ASC
+			FOR UPDATE
 		`, cardID)
 		if err != nil {
-			return redeemResult{}, err
+			return reservedRedemption{}, err
 		}
-		type fileRef struct {
-			id, originalName, path string
-		}
-		files := []fileRef{}
 		for rows.Next() {
-			var item fileRef
+			var item reservedFile
 			if err := rows.Scan(&item.id, &item.originalName, &item.path); err != nil {
 				rows.Close()
-				return redeemResult{}, err
+				return reservedRedemption{}, err
 			}
-			files = append(files, item)
+			reserved.files = append(reserved.files, item)
 		}
 		rows.Close()
-		if len(files) == 0 {
-			return redeemResult{}, errors.New("reserved files not found")
-		}
-		zipPath := filepath.Join(a.cfg.StorageRoot, "zips", redemptionID+".zip")
-		zipEntries := make([]storage.ZipEntry, 0, len(files))
-		for _, file := range files {
-			zipEntries = append(zipEntries, storage.ZipEntry{Path: file.path, EntryName: file.originalName})
-		}
-		size, err := storage.CreateZipFromFiles(zipEntries, zipPath)
-		if err != nil {
-			return redeemResult{}, err
-		}
-		for _, file := range files {
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO redemption_files (redemption_id, goods_file_id, original_name)
-				VALUES ($1, $2, $3)
-			`, redemptionID, file.id, file.originalName); err != nil {
-				return redeemResult{}, err
-			}
-		}
-		_, err = tx.Exec(ctx, `
-			UPDATE goods_files
-			SET status = 'REDEEMED', redeemed_by_redemption_id = $1, redeemed_at = now()
-			WHERE reserved_by_card_key_id = $2 AND status = 'RESERVED'
-		`, redemptionID, cardID)
-		if err != nil {
-			return redeemResult{}, err
-		}
-		_, err = tx.Exec(ctx, `UPDATE redemptions SET zip_path = $1, zip_size_bytes = $2 WHERE id = $3`, zipPath, size, redemptionID)
-		if err != nil {
-			return redeemResult{}, err
+		if len(reserved.files) == 0 {
+			return reservedRedemption{}, errors.New("reserved files not found")
 		}
 	}
 
 	if _, err := tx.Exec(ctx, `UPDATE card_keys SET status = 'REDEEMED', redeemed_at = now() WHERE id = $1`, cardID); err != nil {
-		return redeemResult{}, err
+		return reservedRedemption{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return redeemResult{}, err
+		return reservedRedemption{}, err
 	}
-	return redeemResult{receiptToken: receiptToken, goodsType: goodsType}, nil
+	return reserved, nil
+}
+
+func (a *App) finalizeFileRedemption(ctx context.Context, reserved reservedRedemption) error {
+	zipPath := filepath.Join(a.cfg.StorageRoot, "zips", reserved.redemptionID+".zip")
+	zipEntries := make([]storage.ZipEntry, 0, len(reserved.files))
+	for _, file := range reserved.files {
+		zipEntries = append(zipEntries, storage.ZipEntry{Path: file.path, EntryName: file.originalName})
+	}
+	size, err := storage.CreateZipFromFiles(zipEntries, zipPath)
+	if err != nil {
+		storage.RemovePath(zipPath)
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			storage.RemovePath(zipPath)
+		}
+	}()
+
+	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, file := range reserved.files {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO redemption_files (redemption_id, goods_file_id, original_name)
+			VALUES ($1, $2, $3)
+		`, reserved.redemptionID, file.id, file.originalName); err != nil {
+			return err
+		}
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE goods_files
+		SET status = 'REDEEMED', redeemed_by_redemption_id = $1, redeemed_at = now()
+		WHERE reserved_by_card_key_id = $2 AND status = 'RESERVED'
+	`, reserved.redemptionID, reserved.cardID)
+	if err != nil {
+		return err
+	}
+	if int(tag.RowsAffected()) != len(reserved.files) {
+		return errors.New("reserved file count changed")
+	}
+	if _, err := tx.Exec(ctx, `UPDATE redemptions SET zip_path = $1, zip_size_bytes = $2 WHERE id = $3`, zipPath, size, reserved.redemptionID); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+func (a *App) failFileRedemption(ctx context.Context, reserved reservedRedemption) error {
+	_, err := a.db.Exec(ctx, `
+		UPDATE redemptions
+		SET download_state = 'AVAILABLE',
+		    zip_path = NULL,
+		    zip_size_bytes = NULL
+		WHERE id = $1
+	`, reserved.redemptionID)
+	return err
 }
 
 func (a *App) getReceipt(ctx context.Context, token string) (Receipt, error) {
@@ -266,7 +332,7 @@ func (a *App) claimDownload(ctx context.Context, receiptToken string, ip string,
 		`, redemptionID, receiptHash, ip, ua)
 		return downloadClaim{}, errors.New("download unavailable")
 	}
-	if count > 0 || state == "DOWNLOADED" || state == "IN_PROGRESS" {
+	if count > 0 || state == "DOWNLOADED" {
 		_, _ = a.db.Exec(ctx, `
 			INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
 			VALUES ($1, $2, $3, $4, 'ALREADY_DOWNLOADED')
@@ -280,12 +346,21 @@ func (a *App) claimDownload(ctx context.Context, receiptToken string, ip string,
 	tag, err := a.db.Exec(ctx, `
 		UPDATE redemptions
 		SET download_state = 'IN_PROGRESS', download_claim_token_hash = $1, download_claim_expires_at = $2
-		WHERE id = $3 AND download_state = 'AVAILABLE' AND download_count = 0
+		WHERE id = $3
+		  AND download_count = 0
+		  AND (
+		    download_state = 'AVAILABLE'
+		    OR (download_state = 'IN_PROGRESS' AND download_claim_expires_at < now())
+		  )
 	`, security.LookupHash(claimToken, a.cfg.SecretPepper), time.Now().Add(a.cfg.DownloadClaimTTL), redemptionID)
 	if err != nil {
 		return downloadClaim{}, err
 	}
 	if tag.RowsAffected() == 0 {
+		_, _ = a.db.Exec(ctx, `
+			INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
+			VALUES ($1, $2, $3, $4, 'ALREADY_DOWNLOADED')
+		`, redemptionID, receiptHash, ip, ua)
 		return downloadClaim{}, errAlreadyDownloaded
 	}
 	return downloadClaim{

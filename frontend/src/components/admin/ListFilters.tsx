@@ -52,7 +52,13 @@ export function AdminListFilters({
     <form onSubmit={submit} className={cn("flex flex-col gap-2 sm:flex-row sm:items-center", className)}>
       <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" aria-hidden="true" />
-        <Input name="q" value={queryValue} onChange={(event) => setQueryValue(event.target.value)} placeholder={searchPlaceholder} className="pl-9" />
+        <Input
+          name="q"
+          value={queryValue}
+          onChange={(event) => setQueryValue(event.target.value)}
+          placeholder={searchPlaceholder}
+          className="admin-filter-search-input"
+        />
       </div>
       <Select name="status" value={statusValue} onValueChange={setStatusValue} className="sm:w-36">
         <option value="">全部状态</option>

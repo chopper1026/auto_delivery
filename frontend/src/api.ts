@@ -78,6 +78,13 @@ export const api = {
     const query = search.toString();
     return apiFetch<PaginatedGoodsResponse>(`/api/admin/goods${query ? `?${query}` : ""}`);
   },
+  cardGoodsOptions(params: { q?: string; limit?: number } = {}) {
+    const search = new URLSearchParams();
+    if (params.q) search.set("q", params.q);
+    if (params.limit) search.set("limit", String(params.limit));
+    const query = search.toString();
+    return apiFetch<{ items: Goods[] }>(`/api/admin/goods/card-options${query ? `?${query}` : ""}`);
+  },
   createGoods(input: { name: string; type: "TEXT" | "FILE"; textContent?: string; note?: string }) {
     return apiFetch<{ id: string; items: Goods[] }>("/api/admin/goods", {
       method: "POST",

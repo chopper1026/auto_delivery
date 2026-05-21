@@ -2,6 +2,14 @@ package api
 
 import "testing"
 
+const expectedDefaultDeliveryMessageTemplate = "卡密：{{cardKey}}\n兑换地址：{{redeemUrl}}\n创建时间：{{createdAt}}\n过期时间：{{expiresAt}}\n\n注意事项：卡密仅可兑换一次，请在有效期内及时兑换，兑换后立刻保存，过期或自身未保存导致的损失自负。"
+
+func TestDefaultDeliveryMessageTemplate(t *testing.T) {
+	if defaultDeliveryMessageTemplate != expectedDefaultDeliveryMessageTemplate {
+		t.Fatalf("defaultDeliveryMessageTemplate = %q, want %q", defaultDeliveryMessageTemplate, expectedDefaultDeliveryMessageTemplate)
+	}
+}
+
 func TestNormalizeServiceBaseURL(t *testing.T) {
 	tests := []struct {
 		name    string

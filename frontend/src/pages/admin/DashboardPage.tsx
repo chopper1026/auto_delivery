@@ -10,12 +10,6 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-[var(--line)] pb-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--ink)]">工作台</h2>
-        </div>
-      </header>
-
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard label="卡密总数" value={stats?.totalCardKeys ?? 0} icon={Archive} />
         <StatCard label="可兑换" value={stats?.activeCardKeys ?? 0} icon={TicketCheck} />

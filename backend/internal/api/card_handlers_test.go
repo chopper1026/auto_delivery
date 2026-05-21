@@ -31,6 +31,16 @@ func TestCalculateExpiresAtSupportsConfiguredOptions(t *testing.T) {
 	}
 }
 
+func TestActiveCardKeysWhereClauseExcludesPastDueActiveCards(t *testing.T) {
+	clause := activeCardKeysWhereClause()
+	if !strings.Contains(clause, "status = 'ACTIVE'") {
+		t.Fatalf("active clause should include active cards: %s", clause)
+	}
+	if !strings.Contains(clause, "expires_at >= now()") {
+		t.Fatalf("active clause should exclude expired active cards: %s", clause)
+	}
+}
+
 func TestBuildDeliveryMessageReplacesTemplateTokens(t *testing.T) {
 	created := time.Date(2026, 5, 20, 10, 30, 0, 0, time.Local)
 	expires := created.AddDate(0, 0, 3)
@@ -50,8 +60,8 @@ func TestBuildDeliveryMessageUsesDefaultTemplateWithRealNewlines(t *testing.T) {
 	message := buildDeliveryMessage(settingsResponse{
 		ServiceBaseURL: "https://example.com",
 	}, "AD-AAAA-BBBB-CCCC-DDDD", nil, created)
-	if !strings.Contains(message, "\n卡密：AD-AAAA-BBBB-CCCC-DDDD\n") {
-		t.Fatalf("message should contain real newlines, got %q", message)
+	if !strings.Contains(message, "卡密：AD-AAAA-BBBB-CCCC-DDDD\n兑换地址：https://example.com\n") {
+		t.Fatalf("message should contain default template lines in order, got %q", message)
 	}
 	if strings.Contains(message, `\n`) {
 		t.Fatalf("message should not contain literal slash-n, got %q", message)

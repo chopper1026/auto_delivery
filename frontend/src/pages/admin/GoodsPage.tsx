@@ -44,18 +44,14 @@ export function GoodsPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-3 border-b border-[var(--line)] pb-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--ink)]">库存管理</h2>
-        </div>
-        <NewGoodsDialog />
-      </header>
-
       <section className="overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow)]">
         <div className="border-b border-[var(--line)] px-4 py-3">
-          <div>
-            <h3 className="font-semibold text-[var(--ink)]">库存工作区</h3>
-            <p className="mt-1 text-sm text-[var(--muted)]">文件货物可在行内上传 JSON，货物可按状态启用或停用。</p>
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="font-semibold text-[var(--ink)]">库存工作区</h3>
+              <p className="mt-1 text-sm text-[var(--muted)]">文件货物可在行内上传 JSON，货物可按状态启用或停用。</p>
+            </div>
+            <NewGoodsDialog />
           </div>
           <AdminListFilters
             action="/admin/goods"

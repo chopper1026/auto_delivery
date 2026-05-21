@@ -109,6 +109,20 @@ func SaveInventoryFile(root string, goodsID string, header *multipart.FileHeader
 	}, nil
 }
 
+func RemoveSavedFiles(files []SavedFile) {
+	for _, file := range files {
+		if file.StoragePath != "" {
+			_ = os.Remove(file.StoragePath)
+		}
+	}
+}
+
+func RemovePath(path string) {
+	if path != "" {
+		_ = os.Remove(path)
+	}
+}
+
 func CreateZipFromFiles(entries []ZipEntry, outputPath string) (int64, error) {
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return 0, err

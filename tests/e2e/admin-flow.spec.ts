@@ -6,7 +6,7 @@ async function loginAdmin(page: Page) {
   await page.getByLabel("密码").fill("test1234567890");
   await page.getByRole("button", { name: /进入控制台/ }).click();
   await page.waitForURL("**/admin");
-  await expect(page.getByText("当前管理员")).toBeVisible();
+  await expect(page.getByLabel("管理员账号")).toBeVisible();
 }
 
 const adminPages = [
@@ -22,7 +22,7 @@ test("admin pages render and produce smoke screenshots", async ({ page }, testIn
 
   for (const adminPage of adminPages) {
     await page.goto(adminPage.path);
-    await expect(page.getByText("当前管理员")).toBeVisible();
+    await expect(page.getByLabel("管理员账号")).toBeVisible();
     await page.screenshot({
       fullPage: true,
       path: testInfo.outputPath(`admin-${adminPage.name}.png`),

@@ -524,6 +524,10 @@
   position: relative;
 }
 
+.inputWrap .cardKeyInput.cardKeyInput {
+  padding-left: 3rem;
+}
+
 .inputWrap .cardKeyInput::placeholder {
   color: oklch(0.64 0.02 155 / 0.58);
   opacity: 1;
