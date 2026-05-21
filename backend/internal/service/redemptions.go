@@ -12,7 +12,7 @@ import (
 type RedemptionsRepository interface {
 	ReserveRedemption(context.Context, string, string, string, string, string) (domain.ReservedRedemption, error)
 	FinalizeFileRedemption(context.Context, domain.ReservedRedemption, string, int64) error
-	FailFileRedemption(context.Context, string) error
+	AbortFileRedemption(context.Context, domain.ReservedRedemption) error
 }
 
 type RedemptionsService struct {
@@ -47,7 +47,7 @@ func (s *RedemptionsService) RedeemCardKey(ctx context.Context, cardKey string, 
 	}
 	if reserved.GoodsType == "FILE" {
 		if err := s.finalizeFileRedemption(ctx, reserved); err != nil {
-			_ = s.repository.FailFileRedemption(ctx, reserved.RedemptionID)
+			_ = s.repository.AbortFileRedemption(ctx, reserved)
 			return domain.RedeemResult{}, domain.ErrPrepareRedemptionFiles
 		}
 	}

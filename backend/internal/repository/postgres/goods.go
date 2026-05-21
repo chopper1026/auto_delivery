@@ -51,36 +51,44 @@ func totalPages(totalItems int, pageSize int) int {
 
 func goodsListQuery(where string) string {
 	return fmt.Sprintf(`
-		WITH file_counts AS (
-			SELECT goods_id,
+		WITH paged_goods AS (
+			SELECT g.id, g.name, g.type, g.text_content, g.note, g.status, g.created_at, g.updated_at
+			FROM goods g
+			%s
+			ORDER BY g.created_at DESC
+			LIMIT $%%d OFFSET $%%d
+		),
+		file_counts AS (
+			SELECT goods_files.goods_id,
 			       COUNT(*)::int AS total,
 			       COUNT(*) FILTER (WHERE status = 'AVAILABLE')::int AS available,
 			       COUNT(*) FILTER (WHERE status = 'RESERVED')::int AS reserved,
 			       COUNT(*) FILTER (WHERE status = 'REDEEMED')::int AS redeemed
 			FROM goods_files
-			GROUP BY goods_id
+			JOIN paged_goods pg ON pg.id = goods_files.goods_id
+			GROUP BY goods_files.goods_id
 		),
 		card_counts AS (
-			SELECT goods_id, COUNT(*)::int AS card_keys
+			SELECT card_keys.goods_id, COUNT(*)::int AS card_keys
 			FROM card_keys
-			GROUP BY goods_id
+			JOIN paged_goods pg ON pg.id = card_keys.goods_id
+			GROUP BY card_keys.goods_id
 		),
 		redemption_counts AS (
-			SELECT goods_id, COUNT(*)::int AS redemptions
+			SELECT redemptions.goods_id, COUNT(*)::int AS redemptions
 			FROM redemptions
-			GROUP BY goods_id
+			JOIN paged_goods pg ON pg.id = redemptions.goods_id
+			GROUP BY redemptions.goods_id
 		)
 		SELECT g.id::text, g.name, g.type::text, COALESCE(g.text_content, ''), COALESCE(g.note, ''), g.status::text,
 		       g.created_at, g.updated_at,
 		       COALESCE(fc.total, 0), COALESCE(fc.available, 0), COALESCE(fc.reserved, 0), COALESCE(fc.redeemed, 0),
 		       COALESCE(cc.card_keys, 0), COALESCE(rc.redemptions, 0)
-		FROM goods g
+		FROM paged_goods g
 		LEFT JOIN file_counts fc ON fc.goods_id = g.id
 		LEFT JOIN card_counts cc ON cc.goods_id = g.id
 		LEFT JOIN redemption_counts rc ON rc.goods_id = g.id
-		%s
 		ORDER BY g.created_at DESC
-		LIMIT $%%d OFFSET $%%d
 	`, where)
 }
 
@@ -190,22 +198,39 @@ func (r *GoodsRepository) UpdateGoodsStatus(ctx context.Context, id string, stat
 	return nil
 }
 
-func (r *GoodsRepository) DeleteGoods(ctx context.Context, id string) error {
+func (r *GoodsRepository) DeleteGoods(ctx context.Context, id string) ([]string, error) {
 	count, err := queryInt(ctx, r.db, `SELECT count(*) FROM card_keys WHERE goods_id = $1`, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if count > 0 {
-		return domain.ErrGoodsHasCardKeys
+		return nil, domain.ErrGoodsHasCardKeys
+	}
+	rows, err := r.db.Query(ctx, `SELECT storage_path FROM goods_files WHERE goods_id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{}
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	tag, err := r.db.Exec(ctx, `DELETE FROM goods WHERE id = $1`, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if tag.RowsAffected() == 0 {
-		return domain.ErrGoodsNotFound
+		return nil, domain.ErrGoodsNotFound
 	}
-	return nil
+	return paths, nil
 }
 
 func (r *GoodsRepository) RegisterGoodsFiles(ctx context.Context, goodsID string, files []domain.GoodsFileUpload) error {

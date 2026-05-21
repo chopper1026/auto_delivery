@@ -117,10 +117,11 @@ func RemoveSavedFiles(files []SavedFile) {
 	}
 }
 
-func RemovePath(path string) {
+func RemovePath(path string) error {
 	if path != "" {
-		_ = os.Remove(path)
+		return os.Remove(path)
 	}
+	return nil
 }
 
 func CreateZipFromFiles(entries []ZipEntry, outputPath string) (int64, error) {

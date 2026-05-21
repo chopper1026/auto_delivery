@@ -20,10 +20,22 @@ func TestBuildGoodsListWhereUsesParameterizedFilters(t *testing.T) {
 	}
 }
 
-func TestGoodsListQueryUsesPreAggregatedCounts(t *testing.T) {
+func TestGoodsListQueryAggregatesCountsOnlyForPagedGoods(t *testing.T) {
 	query := goodsListQuery("")
-	if !strings.Contains(query, "file_counts") {
-		t.Fatalf("goods list query must pre-aggregate file counts: %s", query)
+	pagedIndex := strings.Index(query, "paged_goods AS")
+	fileCountsIndex := strings.Index(query, "file_counts AS")
+	if pagedIndex < 0 || fileCountsIndex < 0 || pagedIndex > fileCountsIndex {
+		t.Fatalf("goods list query must page goods before aggregating counts: %s", query)
+	}
+	for _, want := range []string{
+		"JOIN paged_goods pg ON pg.id = goods_files.goods_id",
+		"JOIN paged_goods pg ON pg.id = card_keys.goods_id",
+		"JOIN paged_goods pg ON pg.id = redemptions.goods_id",
+		"FROM paged_goods g",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("goods list query missing %q: %s", want, query)
+		}
 	}
 	if strings.Contains(query, "COUNT(f.id)::int AS total") {
 		t.Fatalf("goods list query must not count joined file rows directly: %s", query)

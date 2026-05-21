@@ -29,3 +29,19 @@ func TestBuildCardKeyListWhereExpiredIncludesActivePastDueCards(t *testing.T) {
 		t.Fatalf("expired status filter should not add args, got %#v", args)
 	}
 }
+
+func TestCardKeyListQueryReturnsComputedExpiredStatus(t *testing.T) {
+	query := cardKeyListQuery("WHERE c.status = 'ACTIVE'", 1, 2)
+	for _, want := range []string{
+		"CASE",
+		"c.status = 'ACTIVE'",
+		"c.expires_at IS NOT NULL",
+		"c.expires_at < now()",
+		"THEN 'EXPIRED'",
+		"ELSE c.status::text",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("card key list query missing %q:\n%s", want, query)
+		}
+	}
+}

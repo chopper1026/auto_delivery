@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"time"
 
 	"auto_delivery/backend/internal/domain"
@@ -18,6 +17,33 @@ type RedemptionsRepository struct {
 
 func NewRedemptionsRepository(db *pgxpool.Pool) *RedemptionsRepository {
 	return &RedemptionsRepository{db: db}
+}
+
+const releaseExpiredCardFilesSQL = `
+	UPDATE goods_files
+	SET status = 'AVAILABLE',
+	    reserved_by_card_key_id = NULL,
+	    reserved_at = NULL
+	WHERE reserved_by_card_key_id = $1
+	  AND status = 'RESERVED'
+`
+
+const expireActiveCardKeySQL = `
+	UPDATE card_keys
+	SET status = 'EXPIRED'
+	WHERE id = $1 AND status = 'ACTIVE'
+`
+
+func expireActiveCardKeyAndReleaseFilesQuery() string {
+	return releaseExpiredCardFilesSQL + "\n" + expireActiveCardKeySQL
+}
+
+func expireActiveCardKeyAndReleaseFiles(ctx context.Context, tx pgx.Tx, cardID string) error {
+	if _, err := tx.Exec(ctx, releaseExpiredCardFilesSQL, cardID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, expireActiveCardKeySQL, cardID)
+	return err
 }
 
 func (r *RedemptionsRepository) ReserveRedemption(ctx context.Context, keyHash string, receiptHash string, receiptMask string, ip string, ua string) (domain.ReservedRedemption, error) {
@@ -40,7 +66,12 @@ func (r *RedemptionsRepository) ReserveRedemption(ctx context.Context, keyHash s
 		return domain.ReservedRedemption{}, domain.ErrCardKeyNotRedeemable
 	}
 	if expiresAt.Valid && expiresAt.Time.Before(time.Now()) && cardStatus == "ACTIVE" {
-		_, _ = tx.Exec(ctx, `UPDATE card_keys SET status = 'EXPIRED' WHERE id = $1`, cardID)
+		if err := expireActiveCardKeyAndReleaseFiles(ctx, tx, cardID); err != nil {
+			return domain.ReservedRedemption{}, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return domain.ReservedRedemption{}, err
+		}
 		return domain.ReservedRedemption{}, domain.ErrCardKeyNotRedeemable
 	}
 	if cardStatus != "ACTIVE" || goodsStatus != "ACTIVE" {
@@ -127,16 +158,38 @@ func (r *RedemptionsRepository) FinalizeFileRedemption(ctx context.Context, rese
 	return tx.Commit(ctx)
 }
 
-func (r *RedemptionsRepository) FailFileRedemption(ctx context.Context, redemptionID string) error {
-	_, err := r.db.Exec(ctx, `
-		UPDATE redemptions
-		SET download_state = 'AVAILABLE',
-		    zip_path = NULL,
-		    zip_size_bytes = NULL
-		WHERE id = $1
-	`, redemptionID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+func (r *RedemptionsRepository) AbortFileRedemption(ctx context.Context, reserved domain.ReservedRedemption) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
 	}
-	return err
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM redemption_files WHERE redemption_id = $1`, reserved.RedemptionID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE goods_files
+		SET status = 'AVAILABLE',
+		    reserved_by_card_key_id = NULL,
+		    reserved_at = NULL,
+		    redeemed_by_redemption_id = NULL,
+		    redeemed_at = NULL
+		WHERE reserved_by_card_key_id = $1
+		   OR redeemed_by_redemption_id = $2
+	`, reserved.CardID, reserved.RedemptionID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM redemptions WHERE id = $1 AND card_key_id = $2`, reserved.RedemptionID, reserved.CardID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE card_keys
+		SET status = 'ACTIVE',
+		    redeemed_at = NULL
+		WHERE id = $1 AND status = 'REDEEMED'
+	`, reserved.CardID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"math"
@@ -217,20 +216,6 @@ func currentAdmin(c *gin.Context) adminContext {
 
 func jsonError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"error": message})
-}
-
-func nullStringToString(value sql.NullString) string {
-	if !value.Valid {
-		return ""
-	}
-	return value.String
-}
-
-func nullTimePtr(value sql.NullTime) *time.Time {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Time
 }
 
 func parsePositiveInt(value string, fallback int, max int) int {

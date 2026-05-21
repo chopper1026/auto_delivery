@@ -53,6 +53,25 @@ func nullTimePtr(value sql.NullTime) *time.Time {
 	return &value.Time
 }
 
+func cardKeyDisplayStatusSQL() string {
+	return `CASE
+			       WHEN c.status = 'ACTIVE' AND c.expires_at IS NOT NULL AND c.expires_at < now() THEN 'EXPIRED'
+			       ELSE c.status::text
+			   END`
+}
+
+func cardKeyListQuery(where string, limitPlaceholder int, offsetPlaceholder int) string {
+	return fmt.Sprintf(`
+			SELECT c.id::text, c.key_mask, c.goods_id::text, g.name, c.goods_type::text, c.file_quantity,
+			       c.expires_at, %s, c.created_at, c.redeemed_at, c.deleted_at
+			FROM card_keys c
+			JOIN goods g ON g.id = c.goods_id
+			%s
+			ORDER BY c.created_at DESC
+			LIMIT $%d OFFSET $%d
+		`, cardKeyDisplayStatusSQL(), where, limitPlaceholder, offsetPlaceholder)
+}
+
 func (r *CardKeysRepository) ListCardKeys(ctx context.Context, params domain.ListCardKeysParams) (domain.PaginatedCardKeysResponse, error) {
 	where, args := buildCardKeyListWhere(params)
 	var totalItems int
@@ -72,15 +91,7 @@ func (r *CardKeysRepository) ListCardKeys(ctx context.Context, params domain.Lis
 	queryArgs = append(queryArgs, params.PageSize, offset)
 	limitPlaceholder := len(args) + 1
 	offsetPlaceholder := len(args) + 2
-	rows, err := r.db.Query(ctx, fmt.Sprintf(`
-		SELECT c.id::text, c.key_mask, c.goods_id::text, g.name, c.goods_type::text, c.file_quantity,
-		       c.expires_at, c.status::text, c.created_at, c.redeemed_at, c.deleted_at
-		FROM card_keys c
-		JOIN goods g ON g.id = c.goods_id
-		%s
-		ORDER BY c.created_at DESC
-		LIMIT $%d OFFSET $%d
-	`, where, limitPlaceholder, offsetPlaceholder), queryArgs...)
+	rows, err := r.db.Query(ctx, cardKeyListQuery(where, limitPlaceholder, offsetPlaceholder), queryArgs...)
 	if err != nil {
 		return domain.PaginatedCardKeysResponse{}, err
 	}

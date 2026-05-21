@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/testutil"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -80,5 +82,57 @@ func TestCardKeyReservationConcurrencyIntegration(t *testing.T) {
 	}
 	if reserved != 1 || distinctCards != 1 {
 		t.Fatalf("reserved = %d, distinctCards = %d; want 1 and 1", reserved, distinctCards)
+	}
+}
+
+func TestExpiredFileCardKeyReleasesReservedInventoryIntegration(t *testing.T) {
+	pool := testutil.OpenTestDB(t)
+	defer pool.Close()
+	app := newIntegrationApp(t, pool)
+	goodsID := createIntegrationFileGoods(t, pool, 1)
+	cardKey, err := security.GenerateCardKey()
+	if err != nil {
+		t.Fatalf("generate card key: %v", err)
+	}
+
+	var cardID string
+	if err := pool.QueryRow(t.Context(), `
+		INSERT INTO card_keys (key_hash, key_mask, goods_id, goods_type, file_quantity, expires_at)
+		VALUES ($1, $2, $3, 'FILE', 1, $4)
+		RETURNING id::text
+	`, security.LookupHash(cardKey, app.cfg.SecretPepper), security.MaskSecret(cardKey), goodsID, time.Now().Add(-time.Hour)).Scan(&cardID); err != nil {
+		t.Fatalf("insert expired card key: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		UPDATE goods_files
+		SET status = 'RESERVED',
+		    reserved_by_card_key_id = $1,
+		    reserved_at = now()
+		WHERE goods_id = $2
+	`, cardID, goodsID); err != nil {
+		t.Fatalf("reserve file: %v", err)
+	}
+
+	if _, err := app.redeemCardKey(t.Context(), cardKey, "127.0.0.1", "integration-test"); err == nil {
+		t.Fatal("expected expired card key redemption to fail")
+	}
+
+	var status string
+	var available int
+	if err := pool.QueryRow(t.Context(), `SELECT status::text FROM card_keys WHERE id = $1`, cardID).Scan(&status); err != nil {
+		t.Fatalf("read card status: %v", err)
+	}
+	if err := pool.QueryRow(t.Context(), `
+		SELECT count(*)::int
+		FROM goods_files
+		WHERE goods_id = $1
+		  AND status = 'AVAILABLE'
+		  AND reserved_by_card_key_id IS NULL
+		  AND reserved_at IS NULL
+	`, goodsID).Scan(&available); err != nil {
+		t.Fatalf("count released inventory: %v", err)
+	}
+	if status != "EXPIRED" || available != 1 {
+		t.Fatalf("status = %q, available = %d; want EXPIRED and 1", status, available)
 	}
 }

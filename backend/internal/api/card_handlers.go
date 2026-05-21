@@ -43,11 +43,7 @@ func (a *App) handleGenerateCardKey(c *gin.Context) {
 	}
 	result, err := a.generateCardKey(c.Request.Context(), req)
 	if err != nil {
-		if errors.Is(err, errNotEnoughInventory) {
-			jsonError(c, http.StatusConflict, "not enough available file inventory")
-			return
-		}
-		jsonError(c, http.StatusBadRequest, err.Error())
+		writeGenerateCardKeyError(c, err)
 		return
 	}
 	a.writeAudit(c.Request.Context(), admin.ID, "card_key.generate", "CardKey", result.ID, a.clientIP(c), userAgent(c), "")
@@ -77,6 +73,21 @@ func (a *App) handleDeleteCardKey(c *gin.Context) {
 var errNotEnoughInventory = domain.ErrNotEnoughInventory
 
 type generatedCardKey = domain.GeneratedCardKey
+
+func writeGenerateCardKeyError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, domain.ErrNotEnoughInventory):
+		jsonError(c, http.StatusConflict, "not enough available file inventory")
+	case errors.Is(err, domain.ErrGoodsNotFound):
+		jsonError(c, http.StatusNotFound, "goods not found")
+	case errors.Is(err, domain.ErrGoodsDisabled):
+		jsonError(c, http.StatusConflict, "goods is disabled")
+	case errors.Is(err, service.ErrInvalidExpiration):
+		jsonError(c, http.StatusBadRequest, "invalid expiration")
+	default:
+		jsonError(c, http.StatusInternalServerError, "failed to generate card key")
+	}
+}
 
 func (a *App) generateCardKey(ctx context.Context, req generateCardKeyRequest) (generatedCardKey, error) {
 	if a.cards == nil {

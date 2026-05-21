@@ -16,6 +16,8 @@ type CardKeysRepository interface {
 	DeleteCardKey(context.Context, string) error
 }
 
+var ErrInvalidExpiration = errors.New("invalid expiration")
+
 type CardKeysService struct {
 	repository   CardKeysRepository
 	secretPepper string
@@ -86,7 +88,7 @@ func CalculateExpiresAt(option string, now time.Time) (*time.Time, error) {
 	case "7d":
 		expires = now.AddDate(0, 0, 7)
 	default:
-		return nil, errors.New("invalid expiration")
+		return nil, ErrInvalidExpiration
 	}
 	return &expires, nil
 }

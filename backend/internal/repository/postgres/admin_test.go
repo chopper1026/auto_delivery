@@ -26,4 +26,3 @@ func TestAdminLogSearchArgsAreParameterized(t *testing.T) {
 		t.Fatalf("empty search args = %q, %q", raw, pattern)
 	}
 }
-

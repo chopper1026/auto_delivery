@@ -37,4 +37,3 @@ func TestBuildOverviewResponseCalculatesStatusDistributionAndTrend(t *testing.T)
 		t.Fatalf("last trend day = %#v", last)
 	}
 }
-

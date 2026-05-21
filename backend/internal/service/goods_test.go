@@ -12,6 +12,9 @@ type goodsRepositoryStub struct {
 	createdInput  domain.CreateGoodsInput
 	updatedID     string
 	updatedStatus string
+	deletedID     string
+	deleteFiles   []string
+	deleteErr     error
 }
 
 func (r *goodsRepositoryStub) ListGoods(context.Context, domain.ListGoodsParams) (domain.PaginatedGoodsResponse, error) {
@@ -33,8 +36,9 @@ func (r *goodsRepositoryStub) UpdateGoodsStatus(_ context.Context, id string, st
 	return nil
 }
 
-func (r *goodsRepositoryStub) DeleteGoods(context.Context, string) error {
-	return nil
+func (r *goodsRepositoryStub) DeleteGoods(_ context.Context, id string) ([]string, error) {
+	r.deletedID = id
+	return r.deleteFiles, r.deleteErr
 }
 
 func (r *goodsRepositoryStub) RegisterGoodsFiles(context.Context, string, []domain.GoodsFileUpload) error {
@@ -85,5 +89,48 @@ func TestGoodsServiceUpdateStatusNormalizesInput(t *testing.T) {
 	}
 	if repo.updatedID != "goods-1" || repo.updatedStatus != "DISABLED" {
 		t.Fatalf("update = %q %q", repo.updatedID, repo.updatedStatus)
+	}
+}
+
+func TestGoodsServiceDeleteGoodsRemovesDeletedFilePaths(t *testing.T) {
+	repo := &goodsRepositoryStub{deleteFiles: []string{"/tmp/a.json", "/tmp/b.json"}}
+	service := NewGoodsService(repo)
+	removed := []string{}
+	service.removePath = func(path string) error {
+		removed = append(removed, path)
+		return nil
+	}
+
+	if err := service.DeleteGoods(t.Context(), "goods-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if repo.deletedID != "goods-1" {
+		t.Fatalf("deleted id = %q", repo.deletedID)
+	}
+	if len(removed) != 2 || removed[0] != "/tmp/a.json" || removed[1] != "/tmp/b.json" {
+		t.Fatalf("removed paths = %#v", removed)
+	}
+}
+
+func TestGoodsServiceDeleteGoodsDoesNotRemoveFilesWhenDeleteFails(t *testing.T) {
+	repo := &goodsRepositoryStub{
+		deleteFiles: []string{"/tmp/a.json"},
+		deleteErr:   domain.ErrGoodsHasCardKeys,
+	}
+	service := NewGoodsService(repo)
+	removed := []string{}
+	service.removePath = func(path string) error {
+		removed = append(removed, path)
+		return nil
+	}
+
+	err := service.DeleteGoods(t.Context(), "goods-1")
+
+	if !errors.Is(err, domain.ErrGoodsHasCardKeys) {
+		t.Fatalf("err = %v, want ErrGoodsHasCardKeys", err)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("removed paths after failed delete = %#v", removed)
 	}
 }

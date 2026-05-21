@@ -1,9 +1,14 @@
 package api
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestCalculateExpiresAtSupportsConfiguredOptions(t *testing.T) {
@@ -55,5 +60,22 @@ func TestBuildDeliveryMessageUsesDefaultTemplateWithRealNewlines(t *testing.T) {
 	}
 	if strings.Contains(message, `\n`) {
 		t.Fatalf("message should not contain literal slash-n, got %q", message)
+	}
+}
+
+func TestWriteGenerateCardKeyErrorDoesNotExposeInternalError(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+
+	writeGenerateCardKeyError(c, errors.New("internal database detail: bad uuid"))
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), "internal database detail") {
+		t.Fatalf("response leaked internal error: %s", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "failed to generate card key") {
+		t.Fatalf("response = %s, want generic generate failure", recorder.Body.String())
 	}
 }

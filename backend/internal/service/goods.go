@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"auto_delivery/backend/internal/domain"
+	"auto_delivery/backend/internal/storage"
 )
 
 type GoodsRepository interface {
@@ -12,17 +14,18 @@ type GoodsRepository interface {
 	ListCardGoodsOptions(context.Context, string, int) ([]domain.Goods, error)
 	CreateGoods(context.Context, domain.CreateGoodsInput) (string, error)
 	UpdateGoodsStatus(context.Context, string, string) error
-	DeleteGoods(context.Context, string) error
+	DeleteGoods(context.Context, string) ([]string, error)
 	RegisterGoodsFiles(context.Context, string, []domain.GoodsFileUpload) error
 	ListGoodsFileExportEntries(context.Context, string, string) ([]domain.GoodsFileExportEntry, error)
 }
 
 type GoodsService struct {
 	repository GoodsRepository
+	removePath func(string) error
 }
 
 func NewGoodsService(repository GoodsRepository) *GoodsService {
-	return &GoodsService{repository: repository}
+	return &GoodsService{repository: repository, removePath: storage.RemovePath}
 }
 
 func (s *GoodsService) ListGoods(ctx context.Context, params domain.ListGoodsParams) (domain.PaginatedGoodsResponse, error) {
@@ -50,7 +53,16 @@ func (s *GoodsService) UpdateGoodsStatus(ctx context.Context, id string, status 
 }
 
 func (s *GoodsService) DeleteGoods(ctx context.Context, id string) error {
-	return s.repository.DeleteGoods(ctx, id)
+	paths, err := s.repository.DeleteGoods(ctx, id)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if err := s.removePath(path); err != nil {
+			return fmt.Errorf("remove deleted goods file %q: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func (s *GoodsService) RegisterGoodsFiles(ctx context.Context, goodsID string, files []domain.GoodsFileUpload) error {
