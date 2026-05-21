@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"auto_delivery/backend/internal/domain"
 	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/storage"
 
@@ -284,22 +285,13 @@ func (a *App) failFileRedemption(ctx context.Context, reserved reservedRedemptio
 }
 
 func (a *App) getReceipt(ctx context.Context, token string) (Receipt, error) {
-	var receipt Receipt
-	err := a.db.QueryRow(ctx, `
-		SELECT g.type::text, g.name, COALESCE(g.text_content, ''), COALESCE(g.note, ''), r.redeemed_at,
-		       r.download_count > 0, c.file_quantity
-		FROM redemptions r
-		JOIN goods g ON g.id = r.goods_id
-		JOIN card_keys c ON c.id = r.card_key_id
-		WHERE r.receipt_token_hash = $1
-	`, security.LookupHash(token, a.cfg.SecretPepper)).Scan(&receipt.Kind, &receipt.GoodsName, &receipt.TextContent, &receipt.GoodsNote, &receipt.RedeemedAt, &receipt.Downloaded, &receipt.FileQuantity)
-	if err != nil {
-		return Receipt{}, err
+	if a.downloads == nil {
+		return Receipt{}, errors.New("downloads service is unavailable")
 	}
-	return receipt, nil
+	return a.downloads.GetReceipt(ctx, token)
 }
 
-var errAlreadyDownloaded = errors.New("already downloaded")
+var errAlreadyDownloaded = domain.ErrAlreadyDownloaded
 
 type downloadClaim struct {
 	redemptionID string
@@ -309,129 +301,31 @@ type downloadClaim struct {
 }
 
 func (a *App) claimDownload(ctx context.Context, receiptToken string, ip string, ua string) (downloadClaim, error) {
-	receiptHash := security.LookupHash(receiptToken, a.cfg.SecretPepper)
-	var redemptionID, state, zipPath, goodsName string
-	var count int
-	err := a.db.QueryRow(ctx, `
-		SELECT r.id::text, r.download_state::text, r.download_count, COALESCE(r.zip_path, ''), g.name
-		FROM redemptions r
-		JOIN goods g ON g.id = r.goods_id
-		WHERE r.receipt_token_hash = $1
-	`, receiptHash).Scan(&redemptionID, &state, &count, &zipPath, &goodsName)
-	if err != nil {
-		_, _ = a.db.Exec(ctx, `
-			INSERT INTO download_logs (receipt_token_hash, ip_address, user_agent, result)
-			VALUES ($1, $2, $3, 'NOT_FOUND')
-		`, receiptHash, ip, ua)
-		return downloadClaim{}, err
+	if a.downloads == nil {
+		return downloadClaim{}, errors.New("downloads service is unavailable")
 	}
-	if zipPath == "" {
-		_, _ = a.db.Exec(ctx, `
-			INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
-			VALUES ($1, $2, $3, $4, 'ERROR')
-		`, redemptionID, receiptHash, ip, ua)
-		return downloadClaim{}, errors.New("download unavailable")
-	}
-	if count > 0 || state == "DOWNLOADED" {
-		_, _ = a.db.Exec(ctx, `
-			INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
-			VALUES ($1, $2, $3, $4, 'ALREADY_DOWNLOADED')
-		`, redemptionID, receiptHash, ip, ua)
-		return downloadClaim{}, errAlreadyDownloaded
-	}
-	claimToken, err := security.RandomToken()
+	claim, err := a.downloads.ClaimDownload(ctx, receiptToken, ip, ua)
 	if err != nil {
 		return downloadClaim{}, err
-	}
-	tag, err := a.db.Exec(ctx, `
-		UPDATE redemptions
-		SET download_state = 'IN_PROGRESS', download_claim_token_hash = $1, download_claim_expires_at = $2
-		WHERE id = $3
-		  AND download_count = 0
-		  AND (
-		    download_state = 'AVAILABLE'
-		    OR (download_state = 'IN_PROGRESS' AND download_claim_expires_at < now())
-		  )
-	`, security.LookupHash(claimToken, a.cfg.SecretPepper), time.Now().Add(a.cfg.DownloadClaimTTL), redemptionID)
-	if err != nil {
-		return downloadClaim{}, err
-	}
-	if tag.RowsAffected() == 0 {
-		_, _ = a.db.Exec(ctx, `
-			INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
-			VALUES ($1, $2, $3, $4, 'ALREADY_DOWNLOADED')
-		`, redemptionID, receiptHash, ip, ua)
-		return downloadClaim{}, errAlreadyDownloaded
 	}
 	return downloadClaim{
-		redemptionID: redemptionID,
-		claimToken:   claimToken,
-		zipPath:      zipPath,
-		filename:     storage.SanitizeEntryName(goodsName) + ".zip",
+		redemptionID: claim.RedemptionID,
+		claimToken:   claim.ClaimToken,
+		zipPath:      claim.ZipPath,
+		filename:     claim.Filename,
 	}, nil
 }
 
 func (a *App) completeDownloadClaim(ctx context.Context, redemptionID string, claimToken string, ip string, ua string) error {
-	claimHash := security.LookupHash(claimToken, a.cfg.SecretPepper)
-	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return err
+	if a.downloads == nil {
+		return errors.New("downloads service is unavailable")
 	}
-	defer tx.Rollback(ctx)
-	var receiptHash string
-	if err := tx.QueryRow(ctx, `SELECT receipt_token_hash FROM redemptions WHERE id = $1`, redemptionID).Scan(&receiptHash); err != nil {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `
-		UPDATE redemptions
-		SET download_state = 'DOWNLOADED', download_count = download_count + 1,
-		    download_claim_token_hash = NULL, download_claim_expires_at = NULL, first_downloaded_at = now()
-		WHERE id = $1 AND download_state = 'IN_PROGRESS' AND download_claim_token_hash = $2 AND download_count = 0
-	`, redemptionID, claimHash)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return errors.New("download claim not active")
-	}
-	_, err = tx.Exec(ctx, `
-		INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
-		VALUES ($1, $2, $3, $4, 'SUCCESS')
-	`, redemptionID, receiptHash, ip, ua)
-	if err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return a.downloads.CompleteDownloadClaim(ctx, redemptionID, claimToken, ip, ua)
 }
 
 func (a *App) releaseDownloadClaim(ctx context.Context, redemptionID string, claimToken string, ip string, ua string) error {
-	claimHash := security.LookupHash(claimToken, a.cfg.SecretPepper)
-	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return err
+	if a.downloads == nil {
+		return errors.New("downloads service is unavailable")
 	}
-	defer tx.Rollback(ctx)
-	var receiptHash string
-	if err := tx.QueryRow(ctx, `SELECT receipt_token_hash FROM redemptions WHERE id = $1`, redemptionID).Scan(&receiptHash); err != nil {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `
-		UPDATE redemptions
-		SET download_state = 'AVAILABLE', download_claim_token_hash = NULL, download_claim_expires_at = NULL
-		WHERE id = $1 AND download_state = 'IN_PROGRESS' AND download_claim_token_hash = $2
-	`, redemptionID, claimHash)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return errors.New("download claim not active")
-	}
-	_, err = tx.Exec(ctx, `
-		INSERT INTO download_logs (redemption_id, receipt_token_hash, ip_address, user_agent, result)
-		VALUES ($1, $2, $3, $4, 'ERROR')
-	`, redemptionID, receiptHash, ip, ua)
-	if err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return a.downloads.ReleaseDownloadClaim(ctx, redemptionID, claimToken, ip, ua)
 }

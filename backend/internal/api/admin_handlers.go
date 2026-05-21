@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"auto_delivery/backend/internal/domain"
 	"auto_delivery/backend/internal/security"
+	"auto_delivery/backend/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -531,83 +533,47 @@ func (a *App) handleUpdateSettings(c *gin.Context) {
 		return
 	}
 	if req.ServiceBaseURL != nil {
-		serviceBaseURL, err := normalizeServiceBaseURL(*req.ServiceBaseURL)
-		if err != nil {
+		if _, err := normalizeServiceBaseURL(*req.ServiceBaseURL); err != nil {
 			jsonError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		if _, err := a.db.Exec(c.Request.Context(), `
-			INSERT INTO system_settings (key, value) VALUES ('service_base_url', $1)
-			ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-		`, serviceBaseURL); err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
 	}
-	if req.DeliveryMessage != nil {
-		deliveryMessage := *req.DeliveryMessage
-		if strings.TrimSpace(deliveryMessage) == "" {
-			deliveryMessage = defaultDeliveryMessageTemplate
-		}
-		if _, err := a.db.Exec(c.Request.Context(), `
-			INSERT INTO system_settings (key, value) VALUES ('card_key_delivery_message_template', $1)
-			ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
-		`, deliveryMessage); err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to update settings")
-			return
-		}
-	}
-	a.writeAudit(c.Request.Context(), admin.ID, "settings.update", "SystemSetting", "", a.clientIP(c), userAgent(c), "")
-	settings, err := a.loadSettings(c.Request.Context())
+	settings, err := a.updateSettings(c.Request.Context(), domain.SettingsUpdate{
+		ServiceBaseURL:          req.ServiceBaseURL,
+		DeliveryMessageTemplate: req.DeliveryMessage,
+	})
 	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to load settings")
+		if strings.Contains(err.Error(), "service address") {
+			jsonError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		jsonError(c, http.StatusInternalServerError, "failed to update settings")
 		return
 	}
+	a.writeAudit(c.Request.Context(), admin.ID, "settings.update", "SystemSetting", "", a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusOK, settings)
 }
 
-const defaultDeliveryMessageTemplate = "卡密：{{cardKey}}\n兑换地址：{{redeemUrl}}\n创建时间：{{createdAt}}\n过期时间：{{expiresAt}}\n\n注意事项：卡密仅可兑换一次，请在有效期内及时兑换，兑换后立刻保存，过期或自身未保存导致的损失自负。"
+const defaultDeliveryMessageTemplate = service.DefaultDeliveryMessageTemplate
 
-type settingsResponse struct {
-	ServiceBaseURL          string `json:"serviceBaseUrl"`
-	DeliveryMessageTemplate string `json:"deliveryMessageTemplate"`
-}
+type settingsResponse = domain.Settings
 
 func normalizeServiceBaseURL(value string) (string, error) {
-	trimmed := strings.TrimSpace(value)
-	parsed, err := url.Parse(trimmed)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", errors.New("service address must be a valid URL")
+	return service.NormalizeServiceBaseURL(value)
+}
+
+func (a *App) updateSettings(ctx context.Context, input domain.SettingsUpdate) (settingsResponse, error) {
+	if a.settings == nil {
+		return settingsResponse{}, errors.New("settings service is unavailable")
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("service address must use http or https")
-	}
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	return parsed.String(), nil
+	return a.settings.Update(ctx, a.cfg.AppBaseURL, input)
 }
 
 func (a *App) loadSettings(ctx context.Context) (settingsResponse, error) {
-	rows, err := a.db.Query(ctx, `SELECT key, value FROM system_settings`)
-	if err != nil {
-		return settingsResponse{}, err
+	if a.settings == nil {
+		return settingsResponse{}, errors.New("settings service is unavailable")
 	}
-	defer rows.Close()
-	out := settingsResponse{ServiceBaseURL: a.cfg.AppBaseURL, DeliveryMessageTemplate: defaultDeliveryMessageTemplate}
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			return settingsResponse{}, err
-		}
-		switch key {
-		case "service_base_url":
-			out.ServiceBaseURL = value
-		case "card_key_delivery_message_template":
-			out.DeliveryMessageTemplate = value
-		}
-	}
-	return out, rows.Err()
+	return a.settings.Load(ctx, a.cfg.AppBaseURL)
 }
 
 func scanNoRows(err error) bool {

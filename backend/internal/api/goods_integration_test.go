@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 
 	"auto_delivery/backend/internal/security"
@@ -33,19 +32,6 @@ func TestParseGoodsListParamsRejectsInvalidStatus(t *testing.T) {
 	_, err := parseGoodsListParams(url.Values{"status": {"DELETED"}})
 	if err == nil {
 		t.Fatal("expected invalid status error")
-	}
-}
-
-func TestBuildGoodsListWhereUsesParameterizedFilters(t *testing.T) {
-	where, args := buildGoodsListWhere(goodsListParams{Query: "会员", Status: "ACTIVE"})
-	if !strings.Contains(where, "g.name ILIKE $1") || !strings.Contains(where, "g.status = $2") {
-		t.Fatalf("where clause did not use expected placeholders: %s", where)
-	}
-	if strings.Contains(where, "会员") || strings.Contains(where, "ACTIVE'") {
-		t.Fatalf("where clause should not interpolate user input: %s", where)
-	}
-	if len(args) != 2 || args[0] != "%会员%" || args[1] != "ACTIVE" {
-		t.Fatalf("args = %#v", args)
 	}
 }
 

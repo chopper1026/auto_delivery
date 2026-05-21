@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"auto_delivery/backend/internal/domain"
 	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -278,12 +279,7 @@ func (a *App) handleExportGoodsFiles(c *gin.Context) {
 	a.writeAudit(c.Request.Context(), admin.ID, goodsExportAuditAction(scope), "Goods", c.Param("id"), a.clientIP(c), userAgent(c), fmt.Sprintf(`{"count":%d}`, len(entries)))
 }
 
-type goodsListParams struct {
-	Query    string
-	Status   string
-	Page     int
-	PageSize int
-}
+type goodsListParams = domain.ListGoodsParams
 
 func defaultGoodsListParams() goodsListParams {
 	return goodsListParams{Page: 1, PageSize: 10}
@@ -304,23 +300,6 @@ func parseGoodsListParams(values url.Values) (goodsListParams, error) {
 	return params, nil
 }
 
-func buildGoodsListWhere(params goodsListParams) (string, []any) {
-	conditions := []string{}
-	args := []any{}
-	if params.Query != "" {
-		args = append(args, "%"+params.Query+"%")
-		conditions = append(conditions, fmt.Sprintf("g.name ILIKE $%d", len(args)))
-	}
-	if params.Status != "" {
-		args = append(args, params.Status)
-		conditions = append(conditions, fmt.Sprintf("g.status = $%d", len(args)))
-	}
-	if len(conditions) == 0 {
-		return "", args
-	}
-	return "WHERE " + strings.Join(conditions, " AND "), args
-}
-
 func totalPages(totalItems int, pageSize int) int {
 	if pageSize < 1 {
 		pageSize = 10
@@ -339,123 +318,18 @@ func goodsExportAuditAction(scope string) string {
 	return "goods.export_unredeemed"
 }
 
-func goodsListQuery(where string) string {
-	return fmt.Sprintf(`
-		WITH file_counts AS (
-			SELECT goods_id,
-			       COUNT(*)::int AS total,
-			       COUNT(*) FILTER (WHERE status = 'AVAILABLE')::int AS available,
-			       COUNT(*) FILTER (WHERE status = 'RESERVED')::int AS reserved,
-			       COUNT(*) FILTER (WHERE status = 'REDEEMED')::int AS redeemed
-			FROM goods_files
-			GROUP BY goods_id
-		),
-		card_counts AS (
-			SELECT goods_id, COUNT(*)::int AS card_keys
-			FROM card_keys
-			GROUP BY goods_id
-		),
-		redemption_counts AS (
-			SELECT goods_id, COUNT(*)::int AS redemptions
-			FROM redemptions
-			GROUP BY goods_id
-		)
-		SELECT g.id::text, g.name, g.type::text, COALESCE(g.text_content, ''), COALESCE(g.note, ''), g.status::text,
-		       g.created_at, g.updated_at,
-		       COALESCE(fc.total, 0), COALESCE(fc.available, 0), COALESCE(fc.reserved, 0), COALESCE(fc.redeemed, 0),
-		       COALESCE(cc.card_keys, 0), COALESCE(rc.redemptions, 0)
-		FROM goods g
-		LEFT JOIN file_counts fc ON fc.goods_id = g.id
-		LEFT JOIN card_counts cc ON cc.goods_id = g.id
-		LEFT JOIN redemption_counts rc ON rc.goods_id = g.id
-		%s
-		ORDER BY g.created_at DESC
-		LIMIT $%%d OFFSET $%%d
-	`, where)
-}
-
-func cardGoodsOptionsQuery() string {
-	return `
-		WITH file_counts AS (
-			SELECT goods_id,
-			       COUNT(*)::int AS total,
-			       COUNT(*) FILTER (WHERE status = 'AVAILABLE')::int AS available,
-			       COUNT(*) FILTER (WHERE status = 'RESERVED')::int AS reserved,
-			       COUNT(*) FILTER (WHERE status = 'REDEEMED')::int AS redeemed
-			FROM goods_files
-			GROUP BY goods_id
-		)
-		SELECT g.id::text, g.name, g.type::text, COALESCE(g.text_content, ''), COALESCE(g.note, ''),
-		       g.status::text, g.created_at, g.updated_at,
-		       COALESCE(fc.total, 0), COALESCE(fc.available, 0), COALESCE(fc.reserved, 0), COALESCE(fc.redeemed, 0),
-		       0, 0
-		FROM goods g
-		LEFT JOIN file_counts fc ON fc.goods_id = g.id
-		WHERE g.status = 'ACTIVE'
-		  AND ($1 = '' OR g.name ILIKE $2 OR COALESCE(g.note, '') ILIKE $2)
-		  AND (g.type = 'TEXT' OR COALESCE(fc.available, 0) > 0)
-		ORDER BY g.created_at DESC
-		LIMIT $3
-	`
-}
-
 func (a *App) listCardGoodsOptions(ctx context.Context, query string, limit int) ([]Goods, error) {
-	pattern := "%" + query + "%"
-	rows, err := a.db.Query(ctx, cardGoodsOptionsQuery(), query, pattern, limit)
-	if err != nil {
-		return nil, err
+	if a.goods == nil {
+		return nil, errors.New("goods service is unavailable")
 	}
-	defer rows.Close()
-
-	items := []Goods{}
-	for rows.Next() {
-		var item Goods
-		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.TextContent, &item.Note, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.Inventory.Total, &item.Inventory.Available, &item.Inventory.Reserved, &item.Inventory.Redeemed, &item.Usage.CardKeys, &item.Usage.Redemptions); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+	return a.goods.ListCardGoodsOptions(ctx, query, limit)
 }
 
 func (a *App) listGoods(ctx context.Context, params goodsListParams) (PaginatedGoodsResponse, error) {
-	where, args := buildGoodsListWhere(params)
-	var totalItems int
-	if err := a.db.QueryRow(ctx, `SELECT count(*) FROM goods g `+where, args...).Scan(&totalItems); err != nil {
-		return PaginatedGoodsResponse{}, err
+	if a.goods == nil {
+		return PaginatedGoodsResponse{}, errors.New("goods service is unavailable")
 	}
-	pages := totalPages(totalItems, params.PageSize)
-	if params.Page > pages {
-		params.Page = pages
-	}
-	offset := (params.Page - 1) * params.PageSize
-	queryArgs := append([]any{}, args...)
-	queryArgs = append(queryArgs, params.PageSize, offset)
-	limitPlaceholder := len(args) + 1
-	offsetPlaceholder := len(args) + 2
-	rows, err := a.db.Query(ctx, fmt.Sprintf(goodsListQuery(where), limitPlaceholder, offsetPlaceholder), queryArgs...)
-	if err != nil {
-		return PaginatedGoodsResponse{}, err
-	}
-	defer rows.Close()
-	items := []Goods{}
-	for rows.Next() {
-		var item Goods
-		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.TextContent, &item.Note, &item.Status, &item.CreatedAt, &item.UpdatedAt, &item.Inventory.Total, &item.Inventory.Available, &item.Inventory.Reserved, &item.Inventory.Redeemed, &item.Usage.CardKeys, &item.Usage.Redemptions); err != nil {
-			return PaginatedGoodsResponse{}, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return PaginatedGoodsResponse{}, err
-	}
-	return PaginatedGoodsResponse{
-		Items:      items,
-		Page:       params.Page,
-		PageSize:   params.PageSize,
-		TotalItems: totalItems,
-		TotalPages: pages,
-	}, nil
+	return a.goods.ListGoods(ctx, params)
 }
 
 func nullIfEmpty(value string) any {

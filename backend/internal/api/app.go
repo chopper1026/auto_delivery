@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"auto_delivery/backend/internal/config"
+	postgresrepo "auto_delivery/backend/internal/repository/postgres"
 	"auto_delivery/backend/internal/security"
+	"auto_delivery/backend/internal/service"
 	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -22,10 +24,14 @@ import (
 )
 
 type App struct {
-	cfg    config.Config
-	db     *pgxpool.Pool
-	redis  *redis.Client
-	router *gin.Engine
+	cfg       config.Config
+	db        *pgxpool.Pool
+	redis     *redis.Client
+	router    *gin.Engine
+	goods     *service.GoodsService
+	cards     *service.CardKeysService
+	settings  *service.SettingsService
+	downloads *service.DownloadsService
 }
 
 type adminContext struct {
@@ -39,6 +45,12 @@ func New(cfg config.Config, db *pgxpool.Pool, redisClient *redis.Client) *App {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	app := &App{cfg: cfg, db: db, redis: redisClient}
+	if db != nil {
+		app.goods = service.NewGoodsService(postgresrepo.NewGoodsRepository(db))
+		app.cards = service.NewCardKeysService(postgresrepo.NewCardKeysRepository(db))
+		app.settings = service.NewSettingsService(postgresrepo.NewSettingsRepository(db))
+		app.downloads = service.NewDownloadsService(postgresrepo.NewDownloadsRepository(db), cfg.SecretPepper, cfg.DownloadClaimTTL)
+	}
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery(), securityHeaders(), maxRequestBody(app.cfg.UploadBodyLimit))
 	router.MaxMultipartMemory = minPositiveInt64(app.cfg.UploadBodyLimit, storage.MaxUploadBytes)

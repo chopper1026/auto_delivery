@@ -2,14 +2,13 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"auto_delivery/backend/internal/domain"
 	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/service"
 
@@ -207,12 +206,7 @@ func (a *App) generateCardKey(ctx context.Context, req generateCardKeyRequest) (
 	}, nil
 }
 
-type cardKeyListParams struct {
-	Query    string
-	Status   string
-	Page     int
-	PageSize int
-}
+type cardKeyListParams = domain.ListCardKeysParams
 
 func defaultCardKeyListParams() cardKeyListParams {
 	return cardKeyListParams{Page: 1, PageSize: 10}
@@ -235,84 +229,11 @@ func parseCardKeyListParams(values url.Values) (cardKeyListParams, error) {
 	return params, nil
 }
 
-func buildCardKeyListWhere(params cardKeyListParams) (string, []any) {
-	conditions := []string{}
-	args := []any{}
-	if params.Query != "" {
-		args = append(args, "%"+params.Query+"%")
-		conditions = append(conditions, fmt.Sprintf("(g.name ILIKE $%d OR c.key_mask ILIKE $%d)", len(args), len(args)))
-	}
-	if params.Status != "" {
-		switch params.Status {
-		case "ACTIVE":
-			conditions = append(conditions, "(c.status = 'ACTIVE' AND (c.expires_at IS NULL OR c.expires_at >= now()))")
-		case "EXPIRED":
-			conditions = append(conditions, "(c.status = 'EXPIRED' OR (c.status = 'ACTIVE' AND c.expires_at < now()))")
-		default:
-			args = append(args, params.Status)
-			conditions = append(conditions, fmt.Sprintf("c.status = $%d", len(args)))
-		}
-	}
-	if len(conditions) == 0 {
-		return "", args
-	}
-	return "WHERE " + strings.Join(conditions, " AND "), args
-}
-
 func (a *App) listCardKeys(ctx context.Context, params cardKeyListParams) (PaginatedCardKeysResponse, error) {
-	where, args := buildCardKeyListWhere(params)
-	var totalItems int
-	if err := a.db.QueryRow(ctx, `
-		SELECT count(*)
-		FROM card_keys c
-		JOIN goods g ON g.id = c.goods_id
-		`+where, args...).Scan(&totalItems); err != nil {
-		return PaginatedCardKeysResponse{}, err
+	if a.cards == nil {
+		return PaginatedCardKeysResponse{}, errors.New("card keys service is unavailable")
 	}
-	pages := totalPages(totalItems, params.PageSize)
-	if params.Page > pages {
-		params.Page = pages
-	}
-	offset := (params.Page - 1) * params.PageSize
-	queryArgs := append([]any{}, args...)
-	queryArgs = append(queryArgs, params.PageSize, offset)
-	limitPlaceholder := len(args) + 1
-	offsetPlaceholder := len(args) + 2
-	rows, err := a.db.Query(ctx, fmt.Sprintf(`
-		SELECT c.id::text, c.key_mask, c.goods_id::text, g.name, c.goods_type::text, c.file_quantity,
-		       c.expires_at, c.status::text, c.created_at, c.redeemed_at, c.deleted_at
-		FROM card_keys c
-		JOIN goods g ON g.id = c.goods_id
-		%s
-		ORDER BY c.created_at DESC
-		LIMIT $%d OFFSET $%d
-	`, where, limitPlaceholder, offsetPlaceholder), queryArgs...)
-	if err != nil {
-		return PaginatedCardKeysResponse{}, err
-	}
-	defer rows.Close()
-	items := []CardKey{}
-	for rows.Next() {
-		var item CardKey
-		var expiresAt, redeemedAt, deletedAt sql.NullTime
-		if err := rows.Scan(&item.ID, &item.KeyMask, &item.GoodsID, &item.GoodsName, &item.GoodsType, &item.FileQuantity, &expiresAt, &item.Status, &item.CreatedAt, &redeemedAt, &deletedAt); err != nil {
-			return PaginatedCardKeysResponse{}, err
-		}
-		item.ExpiresAt = nullTimePtr(expiresAt)
-		item.RedeemedAt = nullTimePtr(redeemedAt)
-		item.DeletedAt = nullTimePtr(deletedAt)
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return PaginatedCardKeysResponse{}, err
-	}
-	return PaginatedCardKeysResponse{
-		Items:      items,
-		Page:       params.Page,
-		PageSize:   params.PageSize,
-		TotalItems: totalItems,
-		TotalPages: pages,
-	}, nil
+	return a.cards.ListCardKeys(ctx, params)
 }
 
 func calculateExpiresAt(option string, now time.Time) (*time.Time, error) {

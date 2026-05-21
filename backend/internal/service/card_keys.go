@@ -1,10 +1,29 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
+
+	"auto_delivery/backend/internal/domain"
 )
+
+type CardKeysRepository interface {
+	ListCardKeys(context.Context, domain.ListCardKeysParams) (domain.PaginatedCardKeysResponse, error)
+}
+
+type CardKeysService struct {
+	repository CardKeysRepository
+}
+
+func NewCardKeysService(repository CardKeysRepository) *CardKeysService {
+	return &CardKeysService{repository: repository}
+}
+
+func (s *CardKeysService) ListCardKeys(ctx context.Context, params domain.ListCardKeysParams) (domain.PaginatedCardKeysResponse, error) {
+	return s.repository.ListCardKeys(ctx, params)
+}
 
 func CalculateExpiresAt(option string, now time.Time) (*time.Time, error) {
 	var expires time.Time

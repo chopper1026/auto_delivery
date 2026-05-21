@@ -1,71 +1,18 @@
 package api
 
-import "time"
+import (
+	"time"
 
-type Inventory struct {
-	Total     int `json:"total"`
-	Available int `json:"available"`
-	Reserved  int `json:"reserved"`
-	Redeemed  int `json:"redeemed"`
-}
+	"auto_delivery/backend/internal/domain"
+)
 
-type Usage struct {
-	CardKeys    int `json:"cardKeys"`
-	Redemptions int `json:"redemptions"`
-}
-
-type Goods struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Type        string    `json:"type"`
-	TextContent string    `json:"textContent,omitempty"`
-	Note        string    `json:"note,omitempty"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	Inventory   Inventory `json:"inventory"`
-	Usage       Usage     `json:"usage"`
-}
-
-type PaginatedGoodsResponse struct {
-	Items      []Goods `json:"items"`
-	Page       int     `json:"page"`
-	PageSize   int     `json:"pageSize"`
-	TotalItems int     `json:"totalItems"`
-	TotalPages int     `json:"totalPages"`
-}
-
-type CardKey struct {
-	ID           string     `json:"id"`
-	KeyMask      string     `json:"keyMask"`
-	GoodsID      string     `json:"goodsId"`
-	GoodsName    string     `json:"goodsName"`
-	GoodsType    string     `json:"goodsType"`
-	FileQuantity int        `json:"fileQuantity"`
-	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
-	Status       string     `json:"status"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	RedeemedAt   *time.Time `json:"redeemedAt,omitempty"`
-	DeletedAt    *time.Time `json:"deletedAt,omitempty"`
-}
-
-type PaginatedCardKeysResponse struct {
-	Items      []CardKey `json:"items"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"pageSize"`
-	TotalItems int       `json:"totalItems"`
-	TotalPages int       `json:"totalPages"`
-}
-
-type Receipt struct {
-	Kind         string    `json:"kind"`
-	GoodsName    string    `json:"goodsName"`
-	TextContent  string    `json:"textContent,omitempty"`
-	GoodsNote    string    `json:"goodsNote,omitempty"`
-	RedeemedAt   time.Time `json:"redeemedAt"`
-	Downloaded   bool      `json:"downloaded"`
-	FileQuantity int       `json:"fileQuantity,omitempty"`
-}
+type Inventory = domain.Inventory
+type Usage = domain.Usage
+type Goods = domain.Goods
+type PaginatedGoodsResponse = domain.PaginatedGoodsResponse
+type CardKey = domain.CardKey
+type PaginatedCardKeysResponse = domain.PaginatedCardKeysResponse
+type Receipt = domain.Receipt
 
 type AuditLog struct {
 	ID         string    `json:"id"`
