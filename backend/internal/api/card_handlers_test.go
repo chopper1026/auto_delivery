@@ -31,16 +31,6 @@ func TestCalculateExpiresAtSupportsConfiguredOptions(t *testing.T) {
 	}
 }
 
-func TestActiveCardKeysWhereClauseExcludesPastDueActiveCards(t *testing.T) {
-	clause := activeCardKeysWhereClause()
-	if !strings.Contains(clause, "status = 'ACTIVE'") {
-		t.Fatalf("active clause should include active cards: %s", clause)
-	}
-	if !strings.Contains(clause, "expires_at >= now()") {
-		t.Fatalf("active clause should exclude expired active cards: %s", clause)
-	}
-}
-
 func TestBuildDeliveryMessageReplacesTemplateTokens(t *testing.T) {
 	created := time.Date(2026, 5, 20, 10, 30, 0, 0, time.Local)
 	expires := created.AddDate(0, 0, 3)

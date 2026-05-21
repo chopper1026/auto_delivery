@@ -2,11 +2,14 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"auto_delivery/backend/internal/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -164,4 +167,111 @@ func (r *GoodsRepository) ListCardGoodsOptions(ctx context.Context, query string
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (r *GoodsRepository) CreateGoods(ctx context.Context, input domain.CreateGoodsInput) (string, error) {
+	var id string
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO goods (name, type, text_content, note)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id::text
+	`, input.Name, input.Type, emptyToNil(input.TextContent), emptyToNil(input.Note)).Scan(&id)
+	return id, err
+}
+
+func (r *GoodsRepository) UpdateGoodsStatus(ctx context.Context, id string, status string) error {
+	tag, err := r.db.Exec(ctx, `UPDATE goods SET status = $1, updated_at = now() WHERE id = $2`, status, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGoodsNotFound
+	}
+	return nil
+}
+
+func (r *GoodsRepository) DeleteGoods(ctx context.Context, id string) error {
+	count, err := queryInt(ctx, r.db, `SELECT count(*) FROM card_keys WHERE goods_id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return domain.ErrGoodsHasCardKeys
+	}
+	tag, err := r.db.Exec(ctx, `DELETE FROM goods WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGoodsNotFound
+	}
+	return nil
+}
+
+func (r *GoodsRepository) RegisterGoodsFiles(ctx context.Context, goodsID string, files []domain.GoodsFileUpload) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var goodsType string
+	if err := tx.QueryRow(ctx, `SELECT type::text FROM goods WHERE id = $1`, goodsID).Scan(&goodsType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrGoodsNotFound
+		}
+		return err
+	}
+	if goodsType != "FILE" {
+		return domain.ErrGoodsNotFileType
+	}
+	for _, item := range files {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO goods_files (goods_id, original_name, stored_name, storage_path, size_bytes, mime_type, sha256)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, goodsID, item.OriginalName, item.StoredName, item.StoragePath, item.SizeBytes, item.MimeType, item.SHA256); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *GoodsRepository) ListGoodsFileExportEntries(ctx context.Context, goodsID string, scope string) ([]domain.GoodsFileExportEntry, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT f.original_name, f.storage_path, f.status::text, COALESCE(c.key_mask, rc.key_mask, ''), f.reserved_at, f.redeemed_at, g.name
+		FROM goods_files f
+		JOIN goods g ON g.id = f.goods_id
+		LEFT JOIN card_keys c ON c.id = f.reserved_by_card_key_id
+		LEFT JOIN redemptions r ON r.id = f.redeemed_by_redemption_id
+		LEFT JOIN card_keys rc ON rc.id = r.card_key_id
+		WHERE f.goods_id = $1 AND (
+			($2 = 'UNREDEEMED' AND f.status IN ('AVAILABLE', 'RESERVED')) OR
+			($2 = 'REDEEMED' AND f.status = 'REDEEMED')
+		)
+		ORDER BY f.original_name ASC, f.created_at ASC
+	`, goodsID, scope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := []domain.GoodsFileExportEntry{}
+	for rows.Next() {
+		var item domain.GoodsFileExportEntry
+		var reservedAt, redeemedAt sql.NullTime
+		if err := rows.Scan(&item.OriginalName, &item.StoragePath, &item.Status, &item.CardKeyMask, &reservedAt, &redeemedAt, &item.GoodsName); err != nil {
+			return nil, err
+		}
+		item.ReservedAt = nullTimePtr(reservedAt)
+		item.RedeemedAt = nullTimePtr(redeemedAt)
+		entries = append(entries, item)
+	}
+	return entries, rows.Err()
+}
+
+func emptyToNil(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
 }

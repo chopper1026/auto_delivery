@@ -1,6 +1,17 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrInvalidGoodsInput = errors.New("invalid goods input")
+	ErrGoodsNotFound     = errors.New("goods not found")
+	ErrGoodsNotFileType  = errors.New("goods is not file type")
+	ErrGoodsHasCardKeys  = errors.New("goods has card keys")
+	ErrGoodsDisabled     = errors.New("goods is disabled")
+)
 
 type GoodsType string
 
@@ -39,6 +50,32 @@ type ListGoodsParams struct {
 	Status   string
 	Page     int
 	PageSize int
+}
+
+type CreateGoodsInput struct {
+	Name        string
+	Type        string
+	TextContent string
+	Note        string
+}
+
+type GoodsFileUpload struct {
+	OriginalName string
+	StoredName   string
+	StoragePath  string
+	SizeBytes    int64
+	MimeType     string
+	SHA256       string
+}
+
+type GoodsFileExportEntry struct {
+	OriginalName string
+	StoragePath  string
+	Status       string
+	CardKeyMask  string
+	ReservedAt   *time.Time
+	RedeemedAt   *time.Time
+	GoodsName    string
 }
 
 type PaginatedGoodsResponse struct {

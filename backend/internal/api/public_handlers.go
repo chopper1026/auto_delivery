@@ -2,21 +2,16 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"auto_delivery/backend/internal/domain"
-	"auto_delivery/backend/internal/security"
-	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 type redeemRequest struct {
@@ -33,7 +28,7 @@ func (a *App) handleRedeem(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid redeem request")
 		return
 	}
-	result, err := a.redeemCardKey(c.Request.Context(), security.NormalizeCardKey(req.CardKey), a.clientIP(c), userAgent(c))
+	result, err := a.redeemCardKey(c.Request.Context(), req.CardKey, a.clientIP(c), userAgent(c))
 	if err != nil {
 		if errors.Is(err, errPrepareRedemptionFiles) {
 			jsonError(c, http.StatusInternalServerError, "failed to prepare redemption files")
@@ -109,179 +104,17 @@ type redeemResult struct {
 	goodsType    string
 }
 
-var errPrepareRedemptionFiles = errors.New("failed to prepare redemption files")
+var errPrepareRedemptionFiles = domain.ErrPrepareRedemptionFiles
 
 func (a *App) redeemCardKey(ctx context.Context, cardKey string, ip string, ua string) (redeemResult, error) {
-	if !security.IsCardKey(cardKey) {
-		return redeemResult{}, errors.New("invalid card key")
+	if a.redemptions == nil {
+		return redeemResult{}, errors.New("redemptions service is unavailable")
 	}
-	receiptToken, err := security.RandomToken()
+	result, err := a.redemptions.RedeemCardKey(ctx, cardKey, ip, ua)
 	if err != nil {
 		return redeemResult{}, err
 	}
-	receiptTokenHash := security.LookupHash(receiptToken, a.cfg.SecretPepper)
-	reserved, err := a.reserveRedemption(ctx, cardKey, receiptToken, receiptTokenHash, ip, ua)
-	if err != nil {
-		return redeemResult{}, err
-	}
-	if reserved.goodsType == "FILE" {
-		if err := a.finalizeFileRedemption(ctx, reserved); err != nil {
-			_ = a.failFileRedemption(ctx, reserved)
-			return redeemResult{}, errPrepareRedemptionFiles
-		}
-	}
-	return redeemResult{receiptToken: receiptToken, goodsType: reserved.goodsType}, nil
-}
-
-type reservedFile struct {
-	id           string
-	originalName string
-	path         string
-}
-
-type reservedRedemption struct {
-	redemptionID string
-	cardID       string
-	goodsType    string
-	files        []reservedFile
-}
-
-func (a *App) reserveRedemption(ctx context.Context, cardKey string, receiptToken string, receiptTokenHash string, ip string, ua string) (reservedRedemption, error) {
-	keyHash := security.LookupHash(cardKey, a.cfg.SecretPepper)
-
-	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return reservedRedemption{}, err
-	}
-	defer tx.Rollback(ctx)
-
-	var cardID, goodsID, goodsType, goodsStatus, cardStatus string
-	var expiresAt sql.NullTime
-	err = tx.QueryRow(ctx, `
-		SELECT c.id::text, c.goods_id::text, c.goods_type::text, c.status::text, c.expires_at, g.status::text
-		FROM card_keys c
-		JOIN goods g ON g.id = c.goods_id
-		WHERE c.key_hash = $1
-		FOR UPDATE OF c
-	`, keyHash).Scan(&cardID, &goodsID, &goodsType, &cardStatus, &expiresAt, &goodsStatus)
-	if err != nil {
-		return reservedRedemption{}, err
-	}
-	if expiresAt.Valid && expiresAt.Time.Before(time.Now()) && cardStatus == "ACTIVE" {
-		_, _ = tx.Exec(ctx, `UPDATE card_keys SET status = 'EXPIRED' WHERE id = $1`, cardID)
-		return reservedRedemption{}, errors.New("card key expired")
-	}
-	if cardStatus != "ACTIVE" || goodsStatus != "ACTIVE" {
-		return reservedRedemption{}, errors.New("card key not redeemable")
-	}
-
-	var redemptionID string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO redemptions (card_key_id, goods_id, receipt_token_hash, receipt_token_mask, ip_address, user_agent)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id::text
-	`, cardID, goodsID, receiptTokenHash, security.MaskSecret(receiptToken), ip, ua).Scan(&redemptionID)
-	if err != nil {
-		return reservedRedemption{}, err
-	}
-
-	reserved := reservedRedemption{redemptionID: redemptionID, cardID: cardID, goodsType: goodsType}
-	if goodsType == "FILE" {
-		rows, err := tx.Query(ctx, `
-			SELECT id::text, original_name, storage_path
-			FROM goods_files
-			WHERE reserved_by_card_key_id = $1 AND status = 'RESERVED'
-			ORDER BY created_at ASC
-			FOR UPDATE
-		`, cardID)
-		if err != nil {
-			return reservedRedemption{}, err
-		}
-		for rows.Next() {
-			var item reservedFile
-			if err := rows.Scan(&item.id, &item.originalName, &item.path); err != nil {
-				rows.Close()
-				return reservedRedemption{}, err
-			}
-			reserved.files = append(reserved.files, item)
-		}
-		rows.Close()
-		if len(reserved.files) == 0 {
-			return reservedRedemption{}, errors.New("reserved files not found")
-		}
-	}
-
-	if _, err := tx.Exec(ctx, `UPDATE card_keys SET status = 'REDEEMED', redeemed_at = now() WHERE id = $1`, cardID); err != nil {
-		return reservedRedemption{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return reservedRedemption{}, err
-	}
-	return reserved, nil
-}
-
-func (a *App) finalizeFileRedemption(ctx context.Context, reserved reservedRedemption) error {
-	zipPath := filepath.Join(a.cfg.StorageRoot, "zips", reserved.redemptionID+".zip")
-	zipEntries := make([]storage.ZipEntry, 0, len(reserved.files))
-	for _, file := range reserved.files {
-		zipEntries = append(zipEntries, storage.ZipEntry{Path: file.path, EntryName: file.originalName})
-	}
-	size, err := storage.CreateZipFromFiles(zipEntries, zipPath)
-	if err != nil {
-		storage.RemovePath(zipPath)
-		return err
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			storage.RemovePath(zipPath)
-		}
-	}()
-
-	tx, err := a.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	for _, file := range reserved.files {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO redemption_files (redemption_id, goods_file_id, original_name)
-			VALUES ($1, $2, $3)
-		`, reserved.redemptionID, file.id, file.originalName); err != nil {
-			return err
-		}
-	}
-	tag, err := tx.Exec(ctx, `
-		UPDATE goods_files
-		SET status = 'REDEEMED', redeemed_by_redemption_id = $1, redeemed_at = now()
-		WHERE reserved_by_card_key_id = $2 AND status = 'RESERVED'
-	`, reserved.redemptionID, reserved.cardID)
-	if err != nil {
-		return err
-	}
-	if int(tag.RowsAffected()) != len(reserved.files) {
-		return errors.New("reserved file count changed")
-	}
-	if _, err := tx.Exec(ctx, `UPDATE redemptions SET zip_path = $1, zip_size_bytes = $2 WHERE id = $3`, zipPath, size, reserved.redemptionID); err != nil {
-		return err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return err
-	}
-	committed = true
-	return nil
-}
-
-func (a *App) failFileRedemption(ctx context.Context, reserved reservedRedemption) error {
-	_, err := a.db.Exec(ctx, `
-		UPDATE redemptions
-		SET download_state = 'AVAILABLE',
-		    zip_path = NULL,
-		    zip_size_bytes = NULL
-		WHERE id = $1
-	`, reserved.redemptionID)
-	return err
+	return redeemResult{receiptToken: result.ReceiptToken, goodsType: result.GoodsType}, nil
 }
 
 func (a *App) getReceipt(ctx context.Context, token string) (Receipt, error) {

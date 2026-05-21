@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 func (a *App) handleListGoods(c *gin.Context) {
@@ -58,32 +56,22 @@ func (a *App) handleCreateGoods(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid goods request")
 		return
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		jsonError(c, http.StatusBadRequest, "goods name is required")
-		return
-	}
-	goodsType := strings.ToUpper(strings.TrimSpace(req.Type))
-	if goodsType != "TEXT" && goodsType != "FILE" {
-		jsonError(c, http.StatusBadRequest, "goods type must be TEXT or FILE")
-		return
-	}
-	if goodsType == "TEXT" && strings.TrimSpace(req.TextContent) == "" {
-		jsonError(c, http.StatusBadRequest, "text content is required")
-		return
-	}
-	var id string
-	err := a.db.QueryRow(c.Request.Context(), `
-		INSERT INTO goods (name, type, text_content, note)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id::text
-	`, name, goodsType, nullIfEmpty(req.TextContent), nullIfEmpty(req.Note)).Scan(&id)
+	id, err := a.createGoods(c.Request.Context(), domain.CreateGoodsInput{
+		Name:        req.Name,
+		Type:        req.Type,
+		TextContent: req.TextContent,
+		Note:        req.Note,
+	})
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidGoodsInput) {
+			jsonError(c, http.StatusBadRequest, "invalid goods request")
+			return
+		}
 		jsonError(c, http.StatusInternalServerError, "failed to create goods")
 		return
 	}
 	action := "goods.create_text"
-	if goodsType == "FILE" {
+	if strings.EqualFold(strings.TrimSpace(req.Type), "FILE") {
 		action = "goods.create_file"
 	}
 	a.writeAudit(c.Request.Context(), admin.ID, action, "Goods", id, a.clientIP(c), userAgent(c), "")
@@ -100,43 +88,40 @@ func (a *App) handleUpdateGoods(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid goods update request")
 		return
 	}
-	status := strings.ToUpper(strings.TrimSpace(req.Status))
-	if status != "ACTIVE" && status != "DISABLED" {
-		jsonError(c, http.StatusBadRequest, "status must be ACTIVE or DISABLED")
-		return
-	}
-	tag, err := a.db.Exec(c.Request.Context(), `UPDATE goods SET status = $1, updated_at = now() WHERE id = $2`, status, c.Param("id"))
+	err := a.updateGoodsStatus(c.Request.Context(), c.Param("id"), req.Status)
 	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to update goods")
-		return
+		switch {
+		case errors.Is(err, domain.ErrInvalidGoodsInput):
+			jsonError(c, http.StatusBadRequest, "status must be ACTIVE or DISABLED")
+			return
+		case errors.Is(err, domain.ErrGoodsNotFound):
+			jsonError(c, http.StatusNotFound, "goods not found")
+			return
+		default:
+			jsonError(c, http.StatusInternalServerError, "failed to update goods")
+			return
+		}
 	}
-	if tag.RowsAffected() == 0 {
-		jsonError(c, http.StatusNotFound, "goods not found")
-		return
-	}
+	status := strings.ToUpper(strings.TrimSpace(req.Status))
 	a.writeAudit(c.Request.Context(), admin.ID, "goods."+strings.ToLower(status), "Goods", c.Param("id"), a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (a *App) handleDeleteGoods(c *gin.Context) {
 	admin := currentAdmin(c)
-	var count int
-	if err := a.db.QueryRow(c.Request.Context(), `SELECT count(*) FROM card_keys WHERE goods_id = $1`, c.Param("id")).Scan(&count); err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to delete goods")
-		return
-	}
-	if count > 0 {
-		jsonError(c, http.StatusConflict, "goods has card keys")
-		return
-	}
-	tag, err := a.db.Exec(c.Request.Context(), `DELETE FROM goods WHERE id = $1`, c.Param("id"))
+	err := a.deleteGoods(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to delete goods")
-		return
-	}
-	if tag.RowsAffected() == 0 {
-		jsonError(c, http.StatusNotFound, "goods not found")
-		return
+		switch {
+		case errors.Is(err, domain.ErrGoodsHasCardKeys):
+			jsonError(c, http.StatusConflict, "goods has card keys")
+			return
+		case errors.Is(err, domain.ErrGoodsNotFound):
+			jsonError(c, http.StatusNotFound, "goods not found")
+			return
+		default:
+			jsonError(c, http.StatusInternalServerError, "failed to delete goods")
+			return
+		}
 	}
 	a.writeAudit(c.Request.Context(), admin.ID, "goods.delete", "Goods", c.Param("id"), a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -167,21 +152,6 @@ func (a *App) handleUploadGoodsFiles(c *gin.Context) {
 		return
 	}
 	goodsID := c.Param("id")
-	tx, err := a.db.BeginTx(c.Request.Context(), pgx.TxOptions{})
-	if err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to start upload")
-		return
-	}
-	defer tx.Rollback(c.Request.Context())
-	var goodsType string
-	if err := tx.QueryRow(c.Request.Context(), `SELECT type::text FROM goods WHERE id = $1`, goodsID).Scan(&goodsType); err != nil {
-		jsonError(c, http.StatusNotFound, "file goods not found")
-		return
-	}
-	if goodsType != "FILE" {
-		jsonError(c, http.StatusBadRequest, "goods is not file type")
-		return
-	}
 	saved := []storage.SavedFile{}
 	committed := false
 	defer func() {
@@ -196,18 +166,19 @@ func (a *App) handleUploadGoodsFiles(c *gin.Context) {
 			return
 		}
 		saved = append(saved, item)
-		_, err = tx.Exec(c.Request.Context(), `
-			INSERT INTO goods_files (goods_id, original_name, stored_name, storage_path, size_bytes, mime_type, sha256)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, goodsID, item.OriginalName, item.StoredName, item.StoragePath, item.SizeBytes, item.MimeType, item.SHA256)
-		if err != nil {
+	}
+	if err := a.registerGoodsFiles(c.Request.Context(), goodsID, saved); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrGoodsNotFound):
+			jsonError(c, http.StatusNotFound, "file goods not found")
+			return
+		case errors.Is(err, domain.ErrGoodsNotFileType):
+			jsonError(c, http.StatusBadRequest, "goods is not file type")
+			return
+		default:
 			jsonError(c, http.StatusInternalServerError, "failed to register uploaded file")
 			return
 		}
-	}
-	if err := tx.Commit(c.Request.Context()); err != nil {
-		jsonError(c, http.StatusInternalServerError, "failed to finish upload")
-		return
 	}
 	committed = true
 	a.writeAudit(c.Request.Context(), admin.ID, "goods.upload_files", "Goods", goodsID, a.clientIP(c), userAgent(c), fmt.Sprintf(`{"count":%d}`, len(saved)))
@@ -221,41 +192,10 @@ func (a *App) handleExportGoodsFiles(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "invalid export scope")
 		return
 	}
-	rows, err := a.db.Query(c.Request.Context(), `
-		SELECT f.original_name, f.storage_path, f.status::text, COALESCE(c.key_mask, rc.key_mask, ''), f.reserved_at, f.redeemed_at, g.name
-		FROM goods_files f
-		JOIN goods g ON g.id = f.goods_id
-		LEFT JOIN card_keys c ON c.id = f.reserved_by_card_key_id
-		LEFT JOIN redemptions r ON r.id = f.redeemed_by_redemption_id
-		LEFT JOIN card_keys rc ON rc.id = r.card_key_id
-		WHERE f.goods_id = $1 AND (
-			($2 = 'UNREDEEMED' AND f.status IN ('AVAILABLE', 'RESERVED')) OR
-			($2 = 'REDEEMED' AND f.status = 'REDEEMED')
-		)
-		ORDER BY f.original_name ASC, f.created_at ASC
-	`, c.Param("id"), scope)
+	entries, err := a.listGoodsFileExportEntries(c.Request.Context(), c.Param("id"), scope)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "failed to export files")
 		return
-	}
-	defer rows.Close()
-	type entry struct {
-		originalName string
-		path         string
-		status       string
-		cardKeyMask  string
-		reservedAt   sql.NullTime
-		redeemedAt   sql.NullTime
-		goodsName    string
-	}
-	entries := []entry{}
-	for rows.Next() {
-		var item entry
-		if err := rows.Scan(&item.originalName, &item.path, &item.status, &item.cardKeyMask, &item.reservedAt, &item.redeemedAt, &item.goodsName); err != nil {
-			jsonError(c, http.StatusInternalServerError, "failed to export files")
-			return
-		}
-		entries = append(entries, item)
 	}
 	if len(entries) == 0 {
 		jsonError(c, http.StatusNotFound, "no files to export")
@@ -266,11 +206,11 @@ func (a *App) handleExportGoodsFiles(c *gin.Context) {
 	_ = csvWriter.Write([]string{"originalName", "status", "cardKeyMask", "reservedAt", "redeemedAt"})
 	zipEntries := make([]storage.ZipEntry, 0, len(entries))
 	for _, item := range entries {
-		_ = csvWriter.Write([]string{item.originalName, item.status, item.cardKeyMask, formatNullTime(item.reservedAt), formatNullTime(item.redeemedAt)})
-		zipEntries = append(zipEntries, storage.ZipEntry{Path: item.path, EntryName: item.originalName})
+		_ = csvWriter.Write([]string{item.OriginalName, item.Status, item.CardKeyMask, formatOptionalTime(item.ReservedAt), formatOptionalTime(item.RedeemedAt)})
+		zipEntries = append(zipEntries, storage.ZipEntry{Path: item.StoragePath, EntryName: item.OriginalName})
 	}
 	csvWriter.Flush()
-	filename := storage.SanitizeEntryName(entries[0].goodsName) + "-" + strings.ToLower(scope) + ".zip"
+	filename := storage.SanitizeEntryName(entries[0].GoodsName) + "-" + strings.ToLower(scope) + ".zip"
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
 	if err := storage.WriteZip(c.Writer, zipEntries, map[string]string{"manifest.csv": manifest.String()}); err != nil {
@@ -332,17 +272,55 @@ func (a *App) listGoods(ctx context.Context, params goodsListParams) (PaginatedG
 	return a.goods.ListGoods(ctx, params)
 }
 
-func nullIfEmpty(value string) any {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
+func (a *App) createGoods(ctx context.Context, input domain.CreateGoodsInput) (string, error) {
+	if a.goods == nil {
+		return "", errors.New("goods service is unavailable")
 	}
-	return trimmed
+	return a.goods.CreateGoods(ctx, input)
 }
 
-func formatNullTime(value sql.NullTime) string {
-	if !value.Valid {
+func (a *App) updateGoodsStatus(ctx context.Context, id string, status string) error {
+	if a.goods == nil {
+		return errors.New("goods service is unavailable")
+	}
+	return a.goods.UpdateGoodsStatus(ctx, id, status)
+}
+
+func (a *App) deleteGoods(ctx context.Context, id string) error {
+	if a.goods == nil {
+		return errors.New("goods service is unavailable")
+	}
+	return a.goods.DeleteGoods(ctx, id)
+}
+
+func (a *App) registerGoodsFiles(ctx context.Context, goodsID string, saved []storage.SavedFile) error {
+	if a.goods == nil {
+		return errors.New("goods service is unavailable")
+	}
+	files := make([]domain.GoodsFileUpload, 0, len(saved))
+	for _, item := range saved {
+		files = append(files, domain.GoodsFileUpload{
+			OriginalName: item.OriginalName,
+			StoredName:   item.StoredName,
+			StoragePath:  item.StoragePath,
+			SizeBytes:    item.SizeBytes,
+			MimeType:     item.MimeType,
+			SHA256:       item.SHA256,
+		})
+	}
+	return a.goods.RegisterGoodsFiles(ctx, goodsID, files)
+}
+
+func (a *App) listGoodsFileExportEntries(ctx context.Context, goodsID string, scope string) ([]domain.GoodsFileExportEntry, error) {
+	if a.goods == nil {
+		return nil, errors.New("goods service is unavailable")
+	}
+	return a.goods.ListGoodsFileExportEntries(ctx, goodsID, scope)
+}
+
+func formatOptionalTime(value *time.Time) string {
+	if value == nil {
 		return ""
 	}
-	return value.Time.Format(time.RFC3339)
+	return value.Format(time.RFC3339)
 }

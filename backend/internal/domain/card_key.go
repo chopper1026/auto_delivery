@@ -1,6 +1,15 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrNotEnoughInventory = errors.New("not enough inventory")
+	ErrCardKeyNotFound    = errors.New("card key not found")
+	ErrCardKeyRedeemed    = errors.New("card key redeemed")
+)
 
 type CardKeyStatus string
 
@@ -12,12 +21,26 @@ const (
 )
 
 type GeneratedCardKey struct {
-	ID              string
-	PlaintextKey    string
-	KeyMask         string
-	DeliveryMessage string
-	ExpiresAt       *time.Time
-	CreatedAt       time.Time
+	ID              string     `json:"id"`
+	PlaintextKey    string     `json:"plaintextKey"`
+	KeyMask         string     `json:"keyMask"`
+	DeliveryMessage string     `json:"deliveryMessage"`
+	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+}
+
+type GenerateCardKeyInput struct {
+	GoodsID      string
+	Expiration   string
+	FileQuantity int
+}
+
+type CreateCardKeyInput struct {
+	GoodsID      string
+	KeyHash      string
+	KeyMask      string
+	FileQuantity int
+	ExpiresAt    *time.Time
 }
 
 type CardKey struct {

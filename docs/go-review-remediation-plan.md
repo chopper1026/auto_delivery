@@ -26,6 +26,71 @@
 3. P2 performance and scale: route code splitting, goods picker pagination/search, overview/log query shape.
 4. P3 structure: backend service/repository split and frontend feature folder split.
 
+## Execution Status As Of 2026-05-21
+
+This section is the authoritative progress tracker. The detailed task checkboxes below are retained as the original implementation recipe, not as a one-for-one history of the exact commits that landed.
+
+Latest pushed commits:
+
+- `bd3c49d fix: address go rewrite review findings`
+- `b5fbab7 refactor: move read models into backend services`
+
+The continuation after `b5fbab7` completes the remaining Task 8 backend layering and P3 frontend feature-folder split.
+
+| Task | Status | What landed | Remaining |
+| --- | --- | --- | --- |
+| Task 1: Add Review Regression Test Skeletons | Complete | Regression coverage was added for static containment, security middleware, upload limits, expired download claims, goods count aggregation, card expiration semantics, card goods options, overview query shape, settings validation, logs parsing, and E2E selectors. | None known. |
+| Task 2: Harden Static File Serving And Security Middleware | Complete | Static file serving now rejects traversal outside `STATIC_DIR`; security headers are registered; trusted proxy CIDR/IP handling is explicit; secure cookie behavior is configurable. | None known. |
+| Task 3: Enforce Upload Body Limits Before Multipart Parsing | Complete | Upload body limit middleware rejects oversized requests before multipart parsing; multipart memory limit uses configuration. | None known. |
+| Task 4: Recover Expired Download Claims | Complete | Expired `IN_PROGRESS` download claims can be reused safely; claim, complete, and release paths are represented in `DownloadsService` and `DownloadsRepository`. | None known. |
+| Task 5: Fix Goods Inventory Overcount | Complete | Goods inventory and usage counts now use pre-aggregated query shapes to avoid multiplied joins; integration coverage verifies the count behavior. | None known. |
+| Task 6: Correct Expired Card Semantics | Complete | Active and expired card filters now distinguish non-expired active cards from active-but-expired cards; overview and card list tests cover the semantics. | None known. |
+| Task 7: Reduce Transaction Time And Clean Orphan Files | Complete | Upload cleanup handles DB failures; file redemption reserves inventory in a shorter transaction and compensates failed download preparation. | None known. |
+| Task 8: Add Backend Service And Repository Boundaries | Complete | Added admin, goods mutation/upload/export, card generation/delete, and public redemption service/repository boundaries. `admin_handlers.go`, `goods_handlers.go`, `card_handlers.go`, and `public_handlers.go` no longer own DB queries or transactions for those workflows; `app.go` wires `AdminService`, `GoodsService`, `CardKeysService`, `DownloadsService`, and `RedemptionsService`. | None known. |
+| Task 9: Add Route-Level Code Splitting | Complete | `frontend/src/App.tsx` uses route-level lazy imports so public/admin routes split into separate chunks. Public and admin pages/components were moved under `frontend/src/features/public/...` and `frontend/src/features/admin/...`; shared UI remains under `frontend/src/components/ui`. | None known. |
+| Task 10: Fix Card Generation Goods Picker Scale | Complete | Added query-backed card goods options API and frontend picker search, removing the hard-coded full goods fetch behavior. | None known. |
+| Task 11: Improve Query Performance For Overview And Logs | Complete | Overview trend data is aggregated in SQL and performance indexes were added for the reviewed query paths. Admin overview/log SQL now lives in `repository/postgres.AdminRepository` behind `AdminService`. | None known. |
+| Task 12: Update E2E And CI-Ready Verification Commands | Complete | E2E selectors were updated; verification documentation was added; Playwright config supports `E2E_BROWSER_CHANNEL=chrome`. | None known. |
+| Task 13: Final Full-System Acceptance | Complete | Backend unit/vet/race, frontend tests/typecheck/build/audit, database integration tests, and Chrome-backed E2E checks passed for the continuation. | None known. |
+
+Completed and pushed:
+
+- P0/P1/P2 review remediation covering static path containment, security headers, trusted proxy IP handling, secure cookie policy, upload body limit, expired download claim recovery, goods inventory count aggregation, expired card semantics, upload cleanup, shorter file redemption reservation, route-level code splitting, card goods options search, overview trend SQL aggregation, indexes, selector updates, and verification docs.
+- Partial backend layering in `b5fbab7`: domain DTOs plus service/repository wrappers for goods read models, card key read models, settings, and receipt/download claims.
+
+Completed in current continuation:
+
+- Finished Task 8 backend layering for the previously remaining API-owned SQL/transaction paths:
+  - Admin login/session/logout/auth, audit writes, overview, and logs moved to `AdminService` and `repository/postgres.AdminRepository`.
+  - Goods create/update/delete/upload DB registration/export listing moved to `GoodsService` and `repository/postgres.GoodsRepository`.
+  - Card key generation/delete and inventory reservation/release moved to `CardKeysService` and `repository/postgres.CardKeysRepository`.
+  - Public card redemption reserve/finalize/fail and ZIP preparation moved to `RedemptionsService` and `repository/postgres.RedemptionsRepository`.
+- Finished the frontend P3 feature split:
+  - Public redeem/receipt code now lives under `frontend/src/features/public/...`.
+  - Admin auth/shell/dashboard/goods/cards/logs/settings/shared code now lives under `frontend/src/features/admin/...`.
+  - `@/*` path alias was added for feature code imports in Vite, Vitest, and TypeScript.
+
+Not done yet:
+
+- None known for the review remediation scope. Future cleanup can continue reducing duplicate API wrapper methods, but it is not required by this plan.
+
+Last recorded verification:
+
+- `go test ./... && go vet ./...`
+- `TEST_DATABASE_URL='postgresql://auto_delivery:replace-with-a-long-random-database-password@localhost:15432/auto_delivery_test?sslmode=disable' go test ./internal/api -count=1`
+- `E2E_BROWSER_CHANNEL=chrome E2E_DATABASE_URL='postgresql://auto_delivery:replace-with-a-long-random-database-password@localhost:15432/auto_delivery_test?sslmode=disable' npm run e2e`
+- Current continuation final acceptance:
+  - `go test ./... && go vet ./... && go test -race ./...`
+  - `npm test -- --run && npm run typecheck && npm run build && npm audit --audit-level=moderate`
+  - `TEST_DATABASE_URL='postgresql://auto_delivery:replace-with-a-long-random-database-password@localhost:15432/auto_delivery_test?sslmode=disable' go test ./internal/api -count=1`
+  - `E2E_BROWSER_CHANNEL=chrome E2E_DATABASE_URL='postgresql://auto_delivery:replace-with-a-long-random-database-password@localhost:15432/auto_delivery_test?sslmode=disable' npm run e2e`
+
+Known caveats:
+
+- Database integration tests and E2E should run sequentially when sharing the same test database because reset/admin initialization can collide.
+- The Playwright bundled browser download timed out in this environment; system Chrome worked through `E2E_BROWSER_CHANNEL=chrome`.
+- Local test PostgreSQL was available on `localhost:15432`; Redis was available on `localhost:6379`.
+
 ## Target File Structure
 
 Backend target structure:

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	"auto_delivery/backend/internal/config"
+	"auto_delivery/backend/internal/domain"
 	postgresrepo "auto_delivery/backend/internal/repository/postgres"
-	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/service"
 	"auto_delivery/backend/internal/storage"
 
@@ -24,20 +25,16 @@ import (
 )
 
 type App struct {
-	cfg       config.Config
-	db        *pgxpool.Pool
-	redis     *redis.Client
-	router    *gin.Engine
-	goods     *service.GoodsService
-	cards     *service.CardKeysService
-	settings  *service.SettingsService
-	downloads *service.DownloadsService
-}
-
-type adminContext struct {
-	ID       string
-	Username string
-	CSRFHash string
+	cfg         config.Config
+	db          *pgxpool.Pool
+	redis       *redis.Client
+	router      *gin.Engine
+	goods       *service.GoodsService
+	cards       *service.CardKeysService
+	settings    *service.SettingsService
+	downloads   *service.DownloadsService
+	redemptions *service.RedemptionsService
+	admin       *service.AdminService
 }
 
 func New(cfg config.Config, db *pgxpool.Pool, redisClient *redis.Client) *App {
@@ -47,9 +44,11 @@ func New(cfg config.Config, db *pgxpool.Pool, redisClient *redis.Client) *App {
 	app := &App{cfg: cfg, db: db, redis: redisClient}
 	if db != nil {
 		app.goods = service.NewGoodsService(postgresrepo.NewGoodsRepository(db))
-		app.cards = service.NewCardKeysService(postgresrepo.NewCardKeysRepository(db))
 		app.settings = service.NewSettingsService(postgresrepo.NewSettingsRepository(db))
+		app.cards = service.NewCardKeysService(postgresrepo.NewCardKeysRepository(db), cfg.SecretPepper, app.settings, cfg.AppBaseURL)
 		app.downloads = service.NewDownloadsService(postgresrepo.NewDownloadsRepository(db), cfg.SecretPepper, cfg.DownloadClaimTTL)
+		app.redemptions = service.NewRedemptionsService(postgresrepo.NewRedemptionsRepository(db), cfg.SecretPepper, cfg.StorageRoot)
+		app.admin = service.NewAdminService(postgresrepo.NewAdminRepository(db), cfg.SecretPepper, cfg.AdminUsername, cfg.AdminPassword, cfg.SessionTTL)
 	}
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery(), securityHeaders(), maxRequestBody(app.cfg.UploadBodyLimit))
@@ -130,22 +129,10 @@ func (a *App) EnsureStorage() error {
 }
 
 func (a *App) EnsureInitialAdmin(ctx context.Context) error {
-	var count int
-	if err := a.db.QueryRow(ctx, `SELECT count(*) FROM admin_users`).Scan(&count); err != nil {
-		return err
+	if a.admin == nil {
+		return errors.New("admin service is unavailable")
 	}
-	if count > 0 {
-		return nil
-	}
-	hash, err := security.HashPassword(a.cfg.AdminPassword)
-	if err != nil {
-		return err
-	}
-	_, err = a.db.Exec(ctx, `
-		INSERT INTO admin_users (username, password_hash)
-		VALUES ($1, $2)
-	`, a.cfg.AdminUsername, hash)
-	return err
+	return a.admin.EnsureInitialAdmin(ctx)
 }
 
 func (a *App) clientIP(c *gin.Context) string {
@@ -183,18 +170,18 @@ func (a *App) consumeRateLimit(ctx context.Context, scope, identifier string, li
 }
 
 func (a *App) writeAudit(ctx context.Context, adminID, action, entityType, entityID, ip, ua string, metadata string) {
-	var entity any
-	if entityID != "" {
-		entity = entityID
+	if a.admin == nil {
+		return
 	}
-	var meta any
-	if metadata != "" {
-		meta = metadata
-	}
-	_, _ = a.db.Exec(ctx, `
-		INSERT INTO admin_audit_logs (admin_user_id, action, entity_type, entity_id, ip_address, user_agent, metadata_json)
-		VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::text IS NULL THEN NULL ELSE $7::jsonb END)
-	`, adminID, action, entityType, entity, ip, ua, meta)
+	_ = a.admin.WriteAudit(ctx, domain.AdminAuditEntry{
+		AdminID:    adminID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		IPAddress:  ip,
+		UserAgent:  ua,
+		Metadata:   metadata,
+	})
 }
 
 func (a *App) requireAdmin() gin.HandlerFunc {
@@ -204,24 +191,19 @@ func (a *App) requireAdmin() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		tokenHash := security.LookupHash(token, a.cfg.SecretPepper)
-		var admin adminContext
-		err = a.db.QueryRow(c.Request.Context(), `
-			SELECT u.id::text, u.username, s.csrf_token_hash
-			FROM admin_sessions s
-			JOIN admin_users u ON u.id = s.admin_user_id
-			WHERE s.token_hash = $1 AND s.expires_at > now()
-		`, tokenHash).Scan(&admin.ID, &admin.Username, &admin.CSRFHash)
-		if err != nil {
+		if a.admin == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
-		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
-			csrf := c.GetHeader("X-CSRF-Token")
-			if csrf == "" || security.LookupHash(csrf, a.cfg.SecretPepper) != admin.CSRFHash {
+		validateCSRF := c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions
+		admin, err := a.admin.AuthenticateSession(c.Request.Context(), token, c.GetHeader("X-CSRF-Token"), validateCSRF)
+		if err != nil {
+			if errors.Is(err, service.ErrInvalidCSRFToken) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "invalid csrf token"})
 				return
 			}
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
 		}
 		c.Set("admin", admin)
 		c.Next()
