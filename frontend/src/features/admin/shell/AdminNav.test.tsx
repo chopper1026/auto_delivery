@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminNav } from "./AdminNav";
 
-vi.mock("@/features/public/shared/AnimatedBrandWord", () => ({
+vi.mock("@/components/brand/AnimatedBrandWord", () => ({
   AnimatedBrandWord: ({ className }: { className?: string }) => (
     <span className={className} data-testid="animated-brand-word">
       AutoDelivery

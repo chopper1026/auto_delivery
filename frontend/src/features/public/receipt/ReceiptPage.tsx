@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, FileArchive, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "@/api";
+import { publicApi } from "@/api/public";
+import { queryKeys } from "@/api/queryKeys";
 import { CopyTextButton } from "./CopyTextButton";
 import { DownloadButton } from "./DownloadButton";
 import { ReceiptReturnButton } from "./ReceiptReturnButton";
@@ -22,7 +23,7 @@ function PublicPage({ children }: { children: ReactNode }) {
 
 export function ReceiptPage() {
   const { token = "" } = useParams();
-  const receipt = useQuery({ queryKey: ["receipt", token], queryFn: () => api.receipt(token), enabled: Boolean(token) });
+  const receipt = useQuery({ queryKey: queryKeys.receipt(token), queryFn: () => publicApi.receipt(token), enabled: Boolean(token) });
   if (receipt.isLoading) {
     return (
       <PublicPage>

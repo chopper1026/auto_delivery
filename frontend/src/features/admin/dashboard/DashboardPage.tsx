@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Archive, CheckCircle2, Clock3, Download, PackageOpen, TicketCheck } from "lucide-react";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { StatCard } from "./StatCard";
 import { WorkbenchAnalytics } from "./WorkbenchAnalytics";
 
 export function DashboardPage() {
-  const overview = useQuery({ queryKey: ["overview"], queryFn: api.overview });
+  const overview = useQuery({ queryKey: queryKeys.overview, queryFn: adminApi.overview });
   const stats = overview.data;
 
   return (

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./LoginPage";
 import styles from "./login.module.css";
 
-vi.mock("@/features/public/shared/AnimatedBrandWord", () => ({
+vi.mock("@/components/brand/AnimatedBrandWord", () => ({
   AnimatedBrandWord: ({ className }: { className?: string }) => (
     <span className={className} data-testid="animated-brand-word">
       AutoDelivery

@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Save } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { api } from "@/api";
-import type { Settings } from "@/types";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
+import type { Settings } from "@/types/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,9 +21,9 @@ export function SettingsForm({
   const [template, setTemplate] = useState(cardKeyDeliveryMessageTemplate);
   const [saved, setSaved] = useState(false);
   const update = useMutation({
-    mutationFn: api.updateSettings,
+    mutationFn: adminApi.updateSettings,
     onSuccess: (value: Settings) => {
-      queryClient.setQueryData(["settings"], value);
+      queryClient.setQueryData(queryKeys.settings, value);
       setServiceUrl(value.serviceBaseUrl);
       setTemplate(value.deliveryMessageTemplate);
       setSaved(true);

@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "./AdminShell";
 
-vi.mock("@/features/public/shared/AnimatedBrandWord", () => ({
+vi.mock("@/components/brand/AnimatedBrandWord", () => ({
   AnimatedBrandWord: ({ className }: { className?: string }) => (
     <span className={className} data-testid="animated-brand-word">
       AutoDelivery
@@ -12,11 +12,14 @@ vi.mock("@/features/public/shared/AnimatedBrandWord", () => ({
   ),
 }));
 
-vi.mock("@/api", () => ({
-  api: {
+vi.mock("@/api/admin", () => ({
+  adminApi: {
     session: vi.fn(async () => ({ admin: { id: "admin-1", username: "admin" }, csrfToken: "csrf-token" })),
     logout: vi.fn(async () => ({ ok: true })),
   },
+}));
+
+vi.mock("@/api/client", () => ({
   clearCsrfToken: vi.fn(),
   setCsrfToken: vi.fn(),
 }));

@@ -305,39 +305,6 @@
   object-fit: contain;
 }
 
-.brandWord {
-  position: relative;
-  display: inline-block;
-  min-width: 232px;
-  color: var(--redeem-brand, var(--primary));
-  backface-visibility: hidden;
-}
-
-.brandWrite {
-  isolation: isolate;
-  min-height: 1.04em;
-  color: var(--redeem-brand, var(--primary));
-}
-
-.brandWrite::after {
-  left: 72%;
-  top: 17%;
-  position: absolute;
-  z-index: 3;
-  width: 12px;
-  height: 12px;
-  pointer-events: none;
-  background: oklch(0.98 0.08 100 / 0.95);
-  clip-path: polygon(50% 0, 60% 38%, 100% 50%, 60% 62%, 50% 100%, 40% 62%, 0 50%, 40% 38%);
-  content: "";
-  filter:
-    drop-shadow(0 0 3px oklch(0.98 0.09 100 / 0.72))
-    drop-shadow(0 0 10px oklch(0.92 0.16 90 / 0.5));
-  opacity: 0;
-  transform: translate3d(-50%, -50%, 0) scale(0.55);
-  animation: brand-gold-spark 5.8s cubic-bezier(0.16, 1, 0.3, 1) 1.1s infinite;
-}
-
 .brandWarm {
   color: var(--redeem-brand);
 }
@@ -348,41 +315,6 @@
 
 .redeemText {
   font-family: var(--font-card-title), var(--font-geist-sans), "Noto Serif SC", serif;
-}
-
-.brandTegaki {
-  position: relative;
-  z-index: 2;
-  display: block;
-  width: 116%;
-  font-size: 1.16em;
-  line-height: 1;
-  color: var(--redeem-brand);
-  filter:
-    drop-shadow(0 1px 0 oklch(0.99 0.07 98 / 0.42))
-    drop-shadow(0 0 7px oklch(0.88 0.13 88 / 0.18))
-    drop-shadow(0 5px 10px oklch(0.36 0.09 70 / 0.08));
-  pointer-events: none;
-}
-
-.brandTegaki [data-tegaki="canvas"] {
-  filter:
-    drop-shadow(0.5px 0 0 oklch(0.48 0.15 74 / 0.6))
-    drop-shadow(-0.5px 0 0 oklch(0.48 0.15 74 / 0.48))
-    drop-shadow(0 0.5px 0 oklch(0.48 0.15 74 / 0.5))
-    drop-shadow(0 -0.5px 0 oklch(0.96 0.1 99 / 0.42))
-    drop-shadow(0 0 0.6px oklch(0.99 0.06 100 / 0.42))
-    drop-shadow(0 0 5px oklch(0.9 0.13 90 / 0.16));
-}
-
-.brandTegaki [data-tegaki="overlay"] {
-  color: oklch(0.72 0.012 98 / 0.28) !important;
-  -webkit-text-fill-color: oklch(0.72 0.012 98 / 0.28) !important;
-  text-shadow:
-    0.35px 0 0 oklch(0.56 0.01 98 / 0.14),
-    -0.35px 0 0 oklch(0.56 0.01 98 / 0.12),
-    0 0.35px 0 oklch(0.56 0.01 98 / 0.12),
-    0 -0.35px 0 oklch(0.98 0.004 98 / 0.22);
 }
 
 .formEnter {
@@ -698,28 +630,6 @@
   68% {
     opacity: 0.28;
     transform: translate3d(-50%, -50%, 0) scale(0.66);
-  }
-}
-
-@keyframes brand-gold-spark {
-  0%,
-  39%,
-  64%,
-  100% {
-    opacity: 0;
-    transform: translate3d(-50%, -50%, 0) scale(0.55);
-  }
-  45% {
-    opacity: 0.86;
-    transform: translate3d(-50%, -50%, 0) scale(1.18);
-  }
-  51% {
-    opacity: 1;
-    transform: translate3d(-50%, -50%, 0) scale(0.94);
-  }
-  58% {
-    opacity: 0.34;
-    transform: translate3d(-50%, -50%, 0) scale(1.28);
   }
 }
 

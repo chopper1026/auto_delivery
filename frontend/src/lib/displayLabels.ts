@@ -1,4 +1,4 @@
-import type { CardKeyStatus, GoodsStatus, GoodsType } from "../types";
+import type { CardKeyStatus, GoodsStatus, GoodsType } from "@/types/shared";
 
 export type GoodsFileStatus = "AVAILABLE" | "RESERVED" | "REDEEMED" | "DELETED";
 export type DownloadResult = "SUCCESS" | "ALREADY_DOWNLOADED" | "NOT_FOUND" | "ERROR";

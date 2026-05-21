@@ -43,6 +43,8 @@
 | `src/lib/redemption/service.ts` | `backend/internal/api/public_handlers.go` |
 | `src/lib/settings/service.ts` | `backend/internal/api/admin_handlers.go` |
 
+> Current structure note: the implemented `go-version` frontend now uses `frontend/src/features/...` for route-level business code instead of `frontend/src/pages/...` and `frontend/src/components/admin|public/...`.
+
 ---
 
 ## Task 1: Build The Parity Matrix And Screenshot Baseline

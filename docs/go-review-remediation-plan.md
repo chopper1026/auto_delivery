@@ -1152,8 +1152,10 @@ describe("route code splitting", () => {
   it("lazy-loads admin and public pages instead of static importing every page into the root bundle", () => {
     expect(appSource).toContain("lazy(");
     expect(appSource).toContain("<Suspense");
-    expect(appSource).not.toContain('import { AdminShell } from "./pages/admin/AdminShell"');
-    expect(appSource).not.toContain('import { GoodsPage } from "./pages/admin/GoodsPage"');
+    expect(appSource).toContain('import("./features/admin/shell/AdminShell")');
+    expect(appSource).toContain('import("./features/admin/goods/GoodsPage")');
+    expect(appSource).not.toContain('from "./pages/admin/');
+    expect(appSource).not.toContain('import("./pages/admin/');
   });
 });
 ```
@@ -1167,16 +1169,16 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Centered } from "./components/Centered";
 
-const RedeemPage = lazy(() => import("./pages/public/RedeemPage").then((module) => ({ default: module.RedeemPage })));
-const ReceiptPage = lazy(() => import("./pages/public/ReceiptPage").then((module) => ({ default: module.ReceiptPage })));
-const AlreadyDownloadedPage = lazy(() => import("./pages/public/AlreadyDownloadedPage").then((module) => ({ default: module.AlreadyDownloadedPage })));
-const LoginPage = lazy(() => import("./pages/admin/LoginPage").then((module) => ({ default: module.LoginPage })));
-const AdminShell = lazy(() => import("./pages/admin/AdminShell").then((module) => ({ default: module.AdminShell })));
-const DashboardPage = lazy(() => import("./pages/admin/DashboardPage").then((module) => ({ default: module.DashboardPage })));
-const GoodsPage = lazy(() => import("./pages/admin/GoodsPage").then((module) => ({ default: module.GoodsPage })));
-const CardsPage = lazy(() => import("./pages/admin/CardsPage").then((module) => ({ default: module.CardsPage })));
-const LogsPage = lazy(() => import("./pages/admin/LogsPage").then((module) => ({ default: module.LogsPage })));
-const SettingsPage = lazy(() => import("./pages/admin/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const RedeemPage = lazy(() => import("./features/public/redeem/RedeemPage").then((module) => ({ default: module.RedeemPage })));
+const ReceiptPage = lazy(() => import("./features/public/receipt/ReceiptPage").then((module) => ({ default: module.ReceiptPage })));
+const AlreadyDownloadedPage = lazy(() => import("./features/public/receipt/AlreadyDownloadedPage").then((module) => ({ default: module.AlreadyDownloadedPage })));
+const LoginPage = lazy(() => import("./features/admin/auth/LoginPage").then((module) => ({ default: module.LoginPage })));
+const AdminShell = lazy(() => import("./features/admin/shell/AdminShell").then((module) => ({ default: module.AdminShell })));
+const DashboardPage = lazy(() => import("./features/admin/dashboard/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const GoodsPage = lazy(() => import("./features/admin/goods/GoodsPage").then((module) => ({ default: module.GoodsPage })));
+const CardsPage = lazy(() => import("./features/admin/cards/CardsPage").then((module) => ({ default: module.CardsPage })));
+const LogsPage = lazy(() => import("./features/admin/logs/LogsPage").then((module) => ({ default: module.LogsPage })));
+const SettingsPage = lazy(() => import("./features/admin/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
 export default function App() {
   return (

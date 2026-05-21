@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 import { useState } from "react";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -9,10 +10,10 @@ export function DeleteCardKeyButton({ cardKeyId, keyMask }: { cardKeyId: string;
   const queryClient = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const remove = useMutation({
-    mutationFn: () => api.deleteCardKey(cardKeyId),
+    mutationFn: () => adminApi.deleteCardKey(cardKeyId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cardKeys"] });
-      queryClient.invalidateQueries({ queryKey: ["goods"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.cardKeysRoot });
+      queryClient.invalidateQueries({ queryKey: queryKeys.goodsRoot });
       setConfirmOpen(false);
     },
   });

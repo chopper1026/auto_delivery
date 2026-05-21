@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/api";
+import { publicApi } from "@/api/public";
 import {
   applyCardKeyInputData,
   formatCardKeyInput,
@@ -31,7 +31,7 @@ export function RedeemForm() {
   const [localError, setLocalError] = useState<string>();
   const compositionStartValue = useRef<string | null>(null);
   const redeem = useMutation({
-    mutationFn: () => api.redeem(cardKey),
+    mutationFn: () => publicApi.redeem(cardKey),
   });
   const receiptHref = redeem.data?.receiptPath;
   const isSuccess = Boolean(receiptHref);

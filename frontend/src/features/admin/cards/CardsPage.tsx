@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Archive } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { AdminListFilters } from "../shared/ListFilters";
 import { AdminPagination } from "../shared/Pagination";
 import { CardKeyForm } from "./CardKeyForm";
@@ -11,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { buildGoodsOptions } from "@/lib/admin/goodsPicker";
 import { formatCardKeyStatus, formatGoodsType } from "@/lib/displayLabels";
 import { formatDateTime } from "@/lib/format";
-import type { CardKeyStatus } from "@/types";
+import type { CardKeyStatus } from "@/types/shared";
 
 function formatExpiration(value?: string | null) {
   return value ? formatDateTime(value) : "永不过期";
@@ -44,10 +45,10 @@ export function CardsPage() {
   const status = parseCardStatus(searchParams.get("status"));
   const statusParam = status ?? "";
   const page = parsePage(searchParams.get("page"));
-  const goods = useQuery({ queryKey: ["goods", "card-options", ""], queryFn: () => api.cardGoodsOptions({ limit: 200 }) });
+  const goods = useQuery({ queryKey: queryKeys.cardGoodsOptions(), queryFn: () => adminApi.cardGoodsOptions({ limit: 200 }) });
   const cards = useQuery({
-    queryKey: ["cardKeys", query, statusParam, page],
-    queryFn: () => api.cardKeys({ q: query, status, page }),
+    queryKey: queryKeys.cardKeys({ q: query, status: statusParam, page }),
+    queryFn: () => adminApi.cardKeys({ q: query, status, page }),
   });
   const goodsOptions = buildGoodsOptions(goods.data?.items ?? []);
   const items = cards.data?.items ?? [];

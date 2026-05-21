@@ -1,8 +1,8 @@
 import { ExternalLink, LogOut, PackageCheck } from "lucide-react";
 import { Link, NavLink } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { AnimatedBrandWord } from "@/features/public/shared/AnimatedBrandWord";
+import { AnimatedBrandWord } from "@/components/brand/AnimatedBrandWord";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { adminNavItems } from "./adminNavigation";
 
 type AdminNavProps = {

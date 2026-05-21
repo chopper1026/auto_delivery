@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FileText, PackagePlus, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { api } from "@/api";
-import type { GoodsType } from "@/types";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
+import type { GoodsType } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,9 +15,9 @@ export function NewGoodsDialog() {
   const [open, setOpen] = useState(false);
   const [goodsType, setGoodsType] = useState<GoodsType>("TEXT");
   const create = useMutation({
-    mutationFn: api.createGoods,
+    mutationFn: adminApi.createGoods,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["goods"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.goodsRoot });
       setOpen(false);
     },
   });

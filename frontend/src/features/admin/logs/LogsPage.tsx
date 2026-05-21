@@ -2,15 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDownloadResult } from "@/lib/displayLabels";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { LogType } from "@/types";
+import type { LogType } from "@/types/admin";
 
 const tabs: Array<{ type: LogType; label: string }> = [
   { type: "redemptions", label: "兑换" },
@@ -61,7 +62,7 @@ export function LogsPage() {
   const type = normalizeType(params.get("type"));
   const query = params.get("q")?.trim() ?? "";
   const page = parsePage(params.get("page"));
-  const logs = useQuery({ queryKey: ["logs", type, query, page], queryFn: () => api.logs({ type, q: query, page }) });
+  const logs = useQuery({ queryKey: queryKeys.logs({ type, q: query, page }), queryFn: () => adminApi.logs({ type, q: query, page }) });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -200,11 +201,11 @@ export function LogsPage() {
             共 {logs.data?.totalItems ?? 0} 条，第 {logs.data?.page ?? page} / {logs.data?.totalPages ?? 1} 页
           </span>
           <div className="flex gap-2">
-            <Link className={cn("secondary", page <= 1 && "pointer-events-none opacity-50")} to={`/admin/logs?${new URLSearchParams({ type, q: query, page: String(Math.max(1, page - 1)) })}`}>
+            <Link className={cn(buttonVariants({ variant: "outline" }), page <= 1 && "pointer-events-none opacity-50")} to={`/admin/logs?${new URLSearchParams({ type, q: query, page: String(Math.max(1, page - 1)) })}`}>
               上一页
             </Link>
             <Link
-              className={cn("secondary", logs.data && page >= logs.data.totalPages && "pointer-events-none opacity-50")}
+              className={cn(buttonVariants({ variant: "outline" }), logs.data && page >= logs.data.totalPages && "pointer-events-none opacity-50")}
               to={`/admin/logs?${new URLSearchParams({ type, q: query, page: String(page + 1) })}`}
             >
               下一页

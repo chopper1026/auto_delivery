@@ -1,4 +1,4 @@
-import type { GoodsStatus, GoodsType, Inventory } from "../../types";
+import type { GoodsStatus, GoodsType, Inventory } from "@/types/shared";
 
 export type CardKeyGoodsFilter = "ALL" | "TEXT" | "FILE" | "GENERATABLE";
 

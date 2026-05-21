@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { SettingsForm } from "./SettingsForm";
 
 export function SettingsPage() {
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const settings = useQuery({ queryKey: queryKeys.settings, queryFn: adminApi.settings });
 
   return (
     <div className="space-y-5">

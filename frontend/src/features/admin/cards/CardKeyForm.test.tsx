@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CardKeyForm, GeneratedCardKeyResult } from "./CardKeyForm";
+import { CardKeyForm } from "./CardKeyForm";
+import { GeneratedCardKeyResult } from "./GeneratedCardKeyResult";
 
 function renderWithQueryClient(ui: React.ReactElement) {
   const client = new QueryClient({

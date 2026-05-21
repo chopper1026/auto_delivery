@@ -1,9 +1,9 @@
 import type { TegakiBundle } from "tegaki/core";
+import parisienne from "tegaki/fonts/parisienne";
 import { TegakiRenderer } from "tegaki/react";
 import { useReducedMotion } from "motion/react";
-import parisienne from "../../../../../node_modules/tegaki/dist/fonts/parisienne/bundle.mjs";
 import { cn } from "@/lib/utils";
-import styles from "./public-pages.module.css";
+import styles from "./AnimatedBrandWord.module.css";
 
 const BRAND_WORD = "AutoDelivery";
 const brandFont = parisienne as unknown as TegakiBundle;

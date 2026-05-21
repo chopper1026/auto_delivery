@@ -3,11 +3,12 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { LockKeyhole, LogIn, PackageCheck, UserRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, setCsrfToken } from "@/api";
+import { adminApi } from "@/api/admin";
+import { setCsrfToken } from "@/api/client";
+import { AnimatedBrandWord } from "@/components/brand/AnimatedBrandWord";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AnimatedBrandWord } from "@/features/public/shared/AnimatedBrandWord";
 import { cn } from "@/lib/utils";
 import styles from "./login.module.css";
 
@@ -18,7 +19,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const quick = reduceMotion ? { duration: 0.01 } : { duration: 0.26, ease: [0.22, 1, 0.36, 1] as const };
   const login = useMutation({
-    mutationFn: () => api.login(username, password),
+    mutationFn: () => adminApi.login(username, password),
     onSuccess: (session) => {
       setCsrfToken(session.csrfToken);
       navigate("/admin", { replace: true });

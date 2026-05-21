@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Archive, FileText } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "@/api";
+import { adminApi } from "@/api/admin";
+import { queryKeys } from "@/api/queryKeys";
 import { AdminListFilters } from "../shared/ListFilters";
 import { AdminPagination } from "../shared/Pagination";
 import { GoodsActions } from "./GoodsActions";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GOODS_TABLE_COLUMN_WIDTHS } from "@/lib/admin/goodsTableUi";
 import { formatGoodsStatus, formatGoodsType } from "@/lib/displayLabels";
-import type { GoodsStatus } from "@/types";
+import type { GoodsStatus } from "@/types/shared";
 
 const goodsStatusOptions = (["ACTIVE", "DISABLED"] as GoodsStatus[]).map((status) => ({
   value: status,
@@ -33,8 +34,8 @@ export function GoodsPage() {
   const statusParam = status ?? "";
   const page = parsePage(searchParams.get("page"));
   const goods = useQuery({
-    queryKey: ["goods", query, statusParam, page],
-    queryFn: () => api.goods({ q: query, status, page }),
+    queryKey: queryKeys.goods({ q: query, status: statusParam, page }),
+    queryFn: () => adminApi.goods({ q: query, status, page }),
   });
   const items = goods.data?.items ?? [];
   const currentPage = goods.data?.page ?? page;

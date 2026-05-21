@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserRound } from "lucide-react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { api, clearCsrfToken, setCsrfToken } from "@/api";
+import { adminApi } from "@/api/admin";
+import { clearCsrfToken, setCsrfToken } from "@/api/client";
+import { queryKeys } from "@/api/queryKeys";
 import { AdminNav } from "./AdminNav";
 import { getAdminPageTitle } from "./adminNavigation";
 import { Centered } from "@/components/Centered";
@@ -11,10 +13,10 @@ export function AdminShell() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const session = useQuery({ queryKey: queryKeys.session, queryFn: adminApi.session });
   const pageTitle = getAdminPageTitle(location.pathname);
   const logout = useMutation({
-    mutationFn: api.logout,
+    mutationFn: adminApi.logout,
     onSettled: () => {
       clearCsrfToken();
       queryClient.clear();

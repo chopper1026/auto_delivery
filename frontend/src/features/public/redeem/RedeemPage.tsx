@@ -1,4 +1,4 @@
-import { AnimatedBrandWord } from "@/features/public/shared/AnimatedBrandWord";
+import { AnimatedBrandWord } from "@/components/brand/AnimatedBrandWord";
 import { RedeemForm } from "./RedeemForm";
 import { cn } from "@/lib/utils";
 import styles from "@/features/public/shared/public-pages.module.css";
