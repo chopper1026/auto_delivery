@@ -19,6 +19,9 @@
 # local planning notes
 /docs/superpowers/
 
+# local agent config
+/.claude/
+
 # local worktrees
 /.worktrees/
 
