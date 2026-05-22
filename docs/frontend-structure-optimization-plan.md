@@ -12,8 +12,8 @@
 
 ## Scope And Ground Rules
 
-- Review target: `go-version` branch worktree at `/Users/chopper1026/codespace/auto_delivery/.worktrees/go-react-rewrite`.
-- Do not edit the main checkout at `/Users/chopper1026/codespace/auto_delivery`.
+- Review target: `go-version` branch worktree at `.worktrees/go-react-rewrite`.
+- Do not edit the main checkout at the repository root.
 - Keep the production shape unchanged: Go serves the Vite build output from `frontend/dist`.
 - Do not redesign visible UI as part of this cleanup. Preserve existing markup behavior and visual snapshots unless a task explicitly updates tests for a structural rename.
 - Prefer moves and narrow extractions over broad rewrites.

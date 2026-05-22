@@ -12,8 +12,8 @@
 
 ## Scope And Ground Rules
 
-- 实施工作目录：`/Users/chopper1026/codespace/auto_delivery/.worktrees/go-react-rewrite`
-- 原版规格目录：`/Users/chopper1026/codespace/auto_delivery`
+- 实施工作目录：`.worktrees/go-react-rewrite`
+- 原版规格目录：仓库根目录
 - 不回退到底层 Next.js；只用原 Next.js 代码作为功能、样式、测试、文案基线。
 - 数据库允许空库重建，不做旧生产数据迁移。
 - 所有用户可见页面必须和原版在布局、颜色、间距、组件状态、文案上尽量一致。
@@ -1403,7 +1403,7 @@ Expected: exit code `0`.
 
 ## Final Verification
 
-Run from `/Users/chopper1026/codespace/auto_delivery/.worktrees/go-react-rewrite`:
+Run from `.worktrees/go-react-rewrite`:
 
 ```bash
 cd backend
@@ -1418,7 +1418,7 @@ go test ./... exits 0
 govulncheck reports No vulnerabilities found
 ```
 
-Run from `/Users/chopper1026/codespace/auto_delivery/.worktrees/go-react-rewrite`:
+Run from `.worktrees/go-react-rewrite`:
 
 ```bash
 npm run test

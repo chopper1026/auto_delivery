@@ -13,7 +13,7 @@
 ## Scope And Assumptions
 
 - Review target: `go-version` 分支当前 worktree 的评审结果。
-- Working directory: `/Users/chopper1026/codespace/auto_delivery/.worktrees/go-react-rewrite`
+- Working directory: `.worktrees/go-react-rewrite`
 - Do not revert unrelated dirty worktree changes.
 - Keep `main` as reference only; do not edit main checkout.
 - Every fix must start with a failing test or regression test, then implementation, then verification.
