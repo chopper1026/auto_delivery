@@ -1,6 +1,6 @@
 import { apiFetch } from "./client";
 import type { AdminSession, LogsResponse, Overview, Settings } from "@/types/admin";
-import type { Goods, PaginatedCardKeysResponse, PaginatedGoodsResponse } from "@/types/shared";
+import type { Goods, PaginatedCardKeysResponse, PaginatedGoodsResponse, UpdateGoodsInput } from "@/types/shared";
 import type { LogType } from "@/types/admin";
 
 export const adminApi = {
@@ -41,10 +41,10 @@ export const adminApi = {
       body: JSON.stringify(input),
     });
   },
-  updateGoods(id: string, status: "ACTIVE" | "DISABLED") {
+  updateGoods(id: string, input: UpdateGoodsInput) {
     return apiFetch<{ ok: true }>(`/api/admin/goods/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(input),
     });
   },
   deleteGoods(id: string) {

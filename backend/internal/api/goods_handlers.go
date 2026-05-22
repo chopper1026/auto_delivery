@@ -49,6 +49,13 @@ type createGoodsRequest struct {
 	Note        string `json:"note"`
 }
 
+type updateGoodsRequest struct {
+	Name        *string `json:"name"`
+	TextContent *string `json:"textContent"`
+	Note        *string `json:"note"`
+	Status      *string `json:"status"`
+}
+
 func (a *App) handleCreateGoods(c *gin.Context) {
 	admin := currentAdmin(c)
 	var req createGoodsRequest
@@ -81,18 +88,21 @@ func (a *App) handleCreateGoods(c *gin.Context) {
 
 func (a *App) handleUpdateGoods(c *gin.Context) {
 	admin := currentAdmin(c)
-	var req struct {
-		Status string `json:"status"`
-	}
+	var req updateGoodsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		jsonError(c, http.StatusBadRequest, "invalid goods update request")
 		return
 	}
-	err := a.updateGoodsStatus(c.Request.Context(), c.Param("id"), req.Status)
+	err := a.updateGoods(c.Request.Context(), c.Param("id"), domain.UpdateGoodsInput{
+		Name:        req.Name,
+		TextContent: req.TextContent,
+		Note:        req.Note,
+		Status:      req.Status,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidGoodsInput):
-			jsonError(c, http.StatusBadRequest, "status must be ACTIVE or DISABLED")
+			jsonError(c, http.StatusBadRequest, "invalid goods update request")
 			return
 		case errors.Is(err, domain.ErrGoodsNotFound):
 			jsonError(c, http.StatusNotFound, "goods not found")
@@ -102,8 +112,12 @@ func (a *App) handleUpdateGoods(c *gin.Context) {
 			return
 		}
 	}
-	status := strings.ToUpper(strings.TrimSpace(req.Status))
-	a.writeAudit(c.Request.Context(), admin.ID, "goods."+strings.ToLower(status), "Goods", c.Param("id"), a.clientIP(c), userAgent(c), "")
+	action := "goods.update"
+	if req.Status != nil && req.Name == nil && req.TextContent == nil && req.Note == nil {
+		status := strings.ToUpper(strings.TrimSpace(*req.Status))
+		action = "goods." + strings.ToLower(status)
+	}
+	a.writeAudit(c.Request.Context(), admin.ID, action, "Goods", c.Param("id"), a.clientIP(c), userAgent(c), "")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -284,6 +298,13 @@ func (a *App) updateGoodsStatus(ctx context.Context, id string, status string) e
 		return errors.New("goods service is unavailable")
 	}
 	return a.goods.UpdateGoodsStatus(ctx, id, status)
+}
+
+func (a *App) updateGoods(ctx context.Context, id string, input domain.UpdateGoodsInput) error {
+	if a.goods == nil {
+		return errors.New("goods service is unavailable")
+	}
+	return a.goods.UpdateGoods(ctx, id, input)
 }
 
 func (a *App) deleteGoods(ctx context.Context, id string) error {

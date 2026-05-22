@@ -33,6 +33,13 @@ export type PaginatedGoodsResponse = {
   totalPages: number;
 };
 
+export type UpdateGoodsInput = {
+  name?: string;
+  textContent?: string;
+  note?: string;
+  status?: GoodsStatus;
+};
+
 export type CardKey = {
   id: string;
   keyMask: string;

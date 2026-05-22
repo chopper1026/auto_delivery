@@ -3,12 +3,12 @@ import { CirclePlay, Info, PauseCircle, Trash2, Upload } from "lucide-react";
 import { adminApi } from "@/api/admin";
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
-import { buildGoodsDetailSections } from "@/lib/admin/goodsTableUi";
 import { GoodsDeleteDialog } from "./GoodsDeleteDialog";
 import { GoodsDetailDialog } from "./GoodsDetailDialog";
 import { GoodsExportMenu } from "./GoodsExportMenu";
 import { GoodsUploadDialog } from "./GoodsUploadDialog";
 import { useState } from "react";
+import type { UpdateGoodsInput } from "@/types/shared";
 
 type InventoryCounts = {
   available: number;
@@ -48,11 +48,17 @@ export function GoodsActions({
   const unredeemedCount = inventory.available + inventory.reserved;
   const redeemedCount = inventory.redeemed;
   const canDelete = usage.cardKeys === 0 && usage.redemptions === 0;
-  const detailSections = buildGoodsDetailSections({ type: goodsType, note: goodsNote ?? null, textContent: textContent ?? null });
 
   const toggleStatus = useMutation({
-    mutationFn: (nextStatus: "ACTIVE" | "DISABLED") => adminApi.updateGoods(goodsId, nextStatus),
+    mutationFn: (nextStatus: "ACTIVE" | "DISABLED") => adminApi.updateGoods(goodsId, { status: nextStatus }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.goodsRoot }),
+  });
+  const updateDetails = useMutation({
+    mutationFn: (input: UpdateGoodsInput) => adminApi.updateGoods(goodsId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.goodsRoot });
+      setDetailOpen(false);
+    },
   });
   const uploadFiles = useMutation({
     mutationFn: (files: FileList) => adminApi.uploadFiles(goodsId, files),
@@ -111,7 +117,17 @@ export function GoodsActions({
         </Button>
       </div>
 
-      <GoodsDetailDialog open={detailOpen} onOpenChange={setDetailOpen} goodsName={goodsName} goodsType={goodsType} detailSections={detailSections} />
+      <GoodsDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        goodsName={goodsName}
+        goodsType={goodsType}
+        goodsNote={goodsNote ?? ""}
+        textContent={textContent ?? ""}
+        error={updateDetails.error}
+        pending={updateDetails.isPending}
+        onSubmit={(input) => updateDetails.mutate(input)}
+      />
       <GoodsUploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}

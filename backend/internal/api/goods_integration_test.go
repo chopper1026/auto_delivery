@@ -104,6 +104,44 @@ func TestGoodsListPreAggregatesMultipliedJoinCountsIntegration(t *testing.T) {
 	}
 }
 
+func TestUpdateTextGoodsDetailsIntegration(t *testing.T) {
+	pool := testutil.OpenTestDB(t)
+	defer pool.Close()
+	app := newIntegrationApp(t, pool)
+	cookie, csrf := loginIntegrationAdmin(t, app)
+
+	createGoods := performJSONRequest(t, app, http.MethodPost, "/api/admin/goods", cookie, csrf, `{"name":"旧文本货物","type":"TEXT","textContent":"旧文本内容","note":"旧备注"}`)
+	if createGoods.Code != http.StatusCreated {
+		t.Fatalf("create goods status = %d, body = %s", createGoods.Code, createGoods.Body.String())
+	}
+	created := decodeResponse[struct {
+		ID string `json:"id"`
+	}](t, createGoods)
+	if created.ID == "" {
+		t.Fatal("create goods response did not include id")
+	}
+
+	updateGoods := performJSONRequest(t, app, http.MethodPatch, "/api/admin/goods/"+created.ID, cookie, csrf, `{"name":"新文本货物","textContent":"新文本内容","note":"新备注"}`)
+	if updateGoods.Code != http.StatusOK {
+		t.Fatalf("update goods status = %d, body = %s", updateGoods.Code, updateGoods.Body.String())
+	}
+
+	payload, err := app.listGoods(t.Context(), goodsListParams{Page: 1, PageSize: 10})
+	if err != nil {
+		t.Fatalf("list goods: %v", err)
+	}
+	for _, item := range payload.Items {
+		if item.ID != created.ID {
+			continue
+		}
+		if item.Name != "新文本货物" || item.TextContent != "新文本内容" || item.Note != "新备注" {
+			t.Fatalf("updated goods = %#v", item)
+		}
+		return
+	}
+	t.Fatalf("updated goods %q not found", created.ID)
+}
+
 func TestFileDeliveryFullFlowIntegration(t *testing.T) {
 	pool := testutil.OpenTestDB(t)
 	defer pool.Close()

@@ -59,6 +59,13 @@ type CreateGoodsInput struct {
 	Note        string
 }
 
+type UpdateGoodsInput struct {
+	Name        *string
+	TextContent *string
+	Note        *string
+	Status      *string
+}
+
 type GoodsFileUpload struct {
 	OriginalName string
 	StoredName   string

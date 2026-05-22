@@ -13,6 +13,7 @@ type GoodsRepository interface {
 	ListGoods(context.Context, domain.ListGoodsParams) (domain.PaginatedGoodsResponse, error)
 	ListCardGoodsOptions(context.Context, string, int) ([]domain.Goods, error)
 	CreateGoods(context.Context, domain.CreateGoodsInput) (string, error)
+	UpdateGoods(context.Context, string, domain.UpdateGoodsInput) error
 	UpdateGoodsStatus(context.Context, string, string) error
 	DeleteGoods(context.Context, string) ([]string, error)
 	RegisterGoodsFiles(context.Context, string, []domain.GoodsFileUpload) error
@@ -50,6 +51,14 @@ func (s *GoodsService) UpdateGoodsStatus(ctx context.Context, id string, status 
 		return domain.ErrInvalidGoodsInput
 	}
 	return s.repository.UpdateGoodsStatus(ctx, id, normalized)
+}
+
+func (s *GoodsService) UpdateGoods(ctx context.Context, id string, input domain.UpdateGoodsInput) error {
+	normalized, err := normalizeUpdateGoodsInput(input)
+	if err != nil {
+		return err
+	}
+	return s.repository.UpdateGoods(ctx, id, normalized)
 }
 
 func (s *GoodsService) DeleteGoods(ctx context.Context, id string) error {
@@ -95,6 +104,44 @@ func normalizeCreateGoodsInput(input domain.CreateGoodsInput) (domain.CreateGood
 	}
 	if normalized.Type == "TEXT" && normalized.TextContent == "" {
 		return domain.CreateGoodsInput{}, domain.ErrInvalidGoodsInput
+	}
+	return normalized, nil
+}
+
+func normalizeUpdateGoodsInput(input domain.UpdateGoodsInput) (domain.UpdateGoodsInput, error) {
+	normalized := domain.UpdateGoodsInput{}
+	changed := false
+	if input.Name != nil {
+		value := strings.TrimSpace(*input.Name)
+		if value == "" {
+			return domain.UpdateGoodsInput{}, domain.ErrInvalidGoodsInput
+		}
+		normalized.Name = &value
+		changed = true
+	}
+	if input.TextContent != nil {
+		value := strings.TrimSpace(*input.TextContent)
+		if value == "" {
+			return domain.UpdateGoodsInput{}, domain.ErrInvalidGoodsInput
+		}
+		normalized.TextContent = &value
+		changed = true
+	}
+	if input.Note != nil {
+		value := strings.TrimSpace(*input.Note)
+		normalized.Note = &value
+		changed = true
+	}
+	if input.Status != nil {
+		value := strings.ToUpper(strings.TrimSpace(*input.Status))
+		if value != "ACTIVE" && value != "DISABLED" {
+			return domain.UpdateGoodsInput{}, domain.ErrInvalidGoodsInput
+		}
+		normalized.Status = &value
+		changed = true
+	}
+	if !changed {
+		return domain.UpdateGoodsInput{}, domain.ErrInvalidGoodsInput
 	}
 	return normalized, nil
 }

@@ -42,6 +42,28 @@ func TestGoodsListQueryAggregatesCountsOnlyForPagedGoods(t *testing.T) {
 	}
 }
 
+func TestGoodsListQueryQualifiesGoodsFileStatusFilters(t *testing.T) {
+	query := goodsListQuery("")
+	for _, want := range []string{
+		"WHERE goods_files.status = 'AVAILABLE'",
+		"WHERE goods_files.status = 'RESERVED'",
+		"WHERE goods_files.status = 'REDEEMED'",
+	} {
+		if !strings.Contains(query, want) {
+			t.Fatalf("goods list query must qualify goods_files status filter %q: %s", want, query)
+		}
+	}
+	for _, bad := range []string{
+		"WHERE status = 'AVAILABLE'",
+		"WHERE status = 'RESERVED'",
+		"WHERE status = 'REDEEMED'",
+	} {
+		if strings.Contains(query, bad) {
+			t.Fatalf("goods list query has ambiguous status filter %q: %s", bad, query)
+		}
+	}
+}
+
 func TestCardGoodsOptionsQueryOnlyReturnsGeneratableActiveGoods(t *testing.T) {
 	query := cardGoodsOptionsQuery()
 	for _, want := range []string{"g.status = 'ACTIVE'", "g.type = 'TEXT'", "COALESCE(fc.available, 0) > 0"} {

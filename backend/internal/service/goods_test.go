@@ -10,6 +10,7 @@ import (
 
 type goodsRepositoryStub struct {
 	createdInput  domain.CreateGoodsInput
+	updatedInput  domain.UpdateGoodsInput
 	updatedID     string
 	updatedStatus string
 	deletedID     string
@@ -33,6 +34,12 @@ func (r *goodsRepositoryStub) CreateGoods(_ context.Context, input domain.Create
 func (r *goodsRepositoryStub) UpdateGoodsStatus(_ context.Context, id string, status string) error {
 	r.updatedID = id
 	r.updatedStatus = status
+	return nil
+}
+
+func (r *goodsRepositoryStub) UpdateGoods(_ context.Context, id string, input domain.UpdateGoodsInput) error {
+	r.updatedID = id
+	r.updatedInput = input
 	return nil
 }
 
@@ -89,6 +96,35 @@ func TestGoodsServiceUpdateStatusNormalizesInput(t *testing.T) {
 	}
 	if repo.updatedID != "goods-1" || repo.updatedStatus != "DISABLED" {
 		t.Fatalf("update = %q %q", repo.updatedID, repo.updatedStatus)
+	}
+}
+
+func TestGoodsServiceUpdateGoodsNormalizesEditableFields(t *testing.T) {
+	repo := &goodsRepositoryStub{}
+	service := NewGoodsService(repo)
+	name := "  CPA 文本卡  "
+	note := "  交付前核对有效期  "
+	textContent := "  账号：demo\n密码：123456  "
+
+	if err := service.UpdateGoods(t.Context(), "goods-1", domain.UpdateGoodsInput{
+		Name:        &name,
+		Note:        &note,
+		TextContent: &textContent,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if repo.updatedID != "goods-1" {
+		t.Fatalf("updated id = %q", repo.updatedID)
+	}
+	if repo.updatedInput.Name == nil || *repo.updatedInput.Name != "CPA 文本卡" {
+		t.Fatalf("updated name = %#v", repo.updatedInput.Name)
+	}
+	if repo.updatedInput.Note == nil || *repo.updatedInput.Note != "交付前核对有效期" {
+		t.Fatalf("updated note = %#v", repo.updatedInput.Note)
+	}
+	if repo.updatedInput.TextContent == nil || *repo.updatedInput.TextContent != "账号：demo\n密码：123456" {
+		t.Fatalf("updated text content = %#v", repo.updatedInput.TextContent)
 	}
 }
 

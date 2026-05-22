@@ -29,6 +29,7 @@ export function NewGoodsDialog() {
       name: String(form.get("name") ?? ""),
       type: "TEXT",
       textContent: String(form.get("textContent") ?? ""),
+      note: String(form.get("note") ?? ""),
     });
   }
 
@@ -100,8 +101,12 @@ export function NewGoodsDialog() {
                 <Input id="new-text-goods-name" name="name" required autoFocus />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-text-goods-content">内容</Label>
+                <Label htmlFor="new-text-goods-content">文本内容</Label>
                 <Textarea id="new-text-goods-content" name="textContent" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-text-goods-note">备注</Label>
+                <Textarea id="new-text-goods-note" name="note" placeholder="例如：交付前先提醒客户保存。" />
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>

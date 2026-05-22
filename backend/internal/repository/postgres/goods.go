@@ -61,9 +61,9 @@ func goodsListQuery(where string) string {
 		file_counts AS (
 			SELECT goods_files.goods_id,
 			       COUNT(*)::int AS total,
-			       COUNT(*) FILTER (WHERE status = 'AVAILABLE')::int AS available,
-			       COUNT(*) FILTER (WHERE status = 'RESERVED')::int AS reserved,
-			       COUNT(*) FILTER (WHERE status = 'REDEEMED')::int AS redeemed
+			       COUNT(*) FILTER (WHERE goods_files.status = 'AVAILABLE')::int AS available,
+			       COUNT(*) FILTER (WHERE goods_files.status = 'RESERVED')::int AS reserved,
+			       COUNT(*) FILTER (WHERE goods_files.status = 'REDEEMED')::int AS redeemed
 			FROM goods_files
 			JOIN paged_goods pg ON pg.id = goods_files.goods_id
 			GROUP BY goods_files.goods_id
@@ -189,6 +189,40 @@ func (r *GoodsRepository) CreateGoods(ctx context.Context, input domain.CreateGo
 
 func (r *GoodsRepository) UpdateGoodsStatus(ctx context.Context, id string, status string) error {
 	tag, err := r.db.Exec(ctx, `UPDATE goods SET status = $1, updated_at = now() WHERE id = $2`, status, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrGoodsNotFound
+	}
+	return nil
+}
+
+func (r *GoodsRepository) UpdateGoods(ctx context.Context, id string, input domain.UpdateGoodsInput) error {
+	assignments := []string{}
+	args := []any{}
+	if input.Name != nil {
+		args = append(args, *input.Name)
+		assignments = append(assignments, fmt.Sprintf("name = $%d", len(args)))
+	}
+	if input.TextContent != nil {
+		args = append(args, emptyToNil(*input.TextContent))
+		assignments = append(assignments, fmt.Sprintf("text_content = $%d", len(args)))
+	}
+	if input.Note != nil {
+		args = append(args, emptyToNil(*input.Note))
+		assignments = append(assignments, fmt.Sprintf("note = $%d", len(args)))
+	}
+	if input.Status != nil {
+		args = append(args, *input.Status)
+		assignments = append(assignments, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if len(assignments) == 0 {
+		return domain.ErrInvalidGoodsInput
+	}
+	args = append(args, id)
+	query := fmt.Sprintf("UPDATE goods SET %s, updated_at = now() WHERE id = $%d", strings.Join(assignments, ", "), len(args))
+	tag, err := r.db.Exec(ctx, query, args...)
 	if err != nil {
 		return err
 	}
