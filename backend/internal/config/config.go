@@ -35,8 +35,5 @@ func Load() (Config, error) {
 	if len(cfg.SecretPepper) < 32 {
 		return Config{}, errors.New("SECRET_PEPPER must be at least 32 characters")
 	}
-	if len(cfg.AdminPassword) < 12 {
-		return Config{}, errors.New("ADMIN_PASSWORD must be at least 12 characters")
-	}
 	return cfg, nil
 }
