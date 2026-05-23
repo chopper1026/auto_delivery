@@ -3,6 +3,7 @@ WORKDIR /src
 COPY package*.json ./
 RUN npm ci
 COPY index.html tsconfig.json vite.config.ts vitest.config.ts ./
+COPY public ./public
 COPY frontend ./frontend
 RUN npm run build
 
