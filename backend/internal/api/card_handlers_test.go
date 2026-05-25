@@ -27,6 +27,13 @@ func TestCalculateExpiresAtSupportsConfiguredOptions(t *testing.T) {
 	if !got.Equal(now.AddDate(0, 0, 3)) {
 		t.Fatalf("3d expiration = %s", got)
 	}
+	got, err = calculateExpiresAt("2d", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Equal(now.AddDate(0, 0, 2)) {
+		t.Fatalf("2d expiration = %s", got)
+	}
 	got, err = calculateExpiresAt("never", now)
 	if err != nil {
 		t.Fatal(err)

@@ -93,6 +93,7 @@ export function CardKeyForm({ goods }: { goods: CardKeyGoodsPickerItem[] }) {
             <Select id="expiration" name="expiration" defaultValue="3d">
               <option value="3m">3 分钟</option>
               <option value="1d">1 天</option>
+              <option value="2d">2 天</option>
               <option value="3d">3 天</option>
               <option value="7d">7 天</option>
               <option value="never">永不过期</option>

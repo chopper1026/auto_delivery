@@ -85,6 +85,8 @@ func CalculateExpiresAt(option string, now time.Time) (*time.Time, error) {
 		expires = now.Add(3 * time.Minute)
 	case "1d":
 		expires = now.AddDate(0, 0, 1)
+	case "2d":
+		expires = now.AddDate(0, 0, 2)
 	case "7d":
 		expires = now.AddDate(0, 0, 7)
 	default:
