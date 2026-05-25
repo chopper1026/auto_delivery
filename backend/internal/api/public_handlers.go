@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"auto_delivery/backend/internal/domain"
+	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -91,7 +92,7 @@ func (a *App) handleDownload(c *gin.Context) {
 	}
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
-	c.Header("Content-Disposition", `attachment; filename="`+claim.filename+`"`)
+	c.Header("Content-Disposition", storage.AttachmentDisposition(claim.filename))
 	if _, err := io.Copy(c.Writer, file); err != nil {
 		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		return

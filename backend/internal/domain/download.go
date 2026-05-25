@@ -13,6 +13,7 @@ type DownloadClaim struct {
 	ZipPath      string
 	Filename     string
 	GoodsName    string
+	FileQuantity int
 }
 
 type Receipt struct {

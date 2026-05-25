@@ -224,9 +224,9 @@ func (a *App) handleExportGoodsFiles(c *gin.Context) {
 		zipEntries = append(zipEntries, storage.ZipEntry{Path: item.StoragePath, EntryName: item.OriginalName})
 	}
 	csvWriter.Flush()
-	filename := storage.SanitizeEntryName(entries[0].GoodsName) + "-" + strings.ToLower(scope) + ".zip"
+	filename := storage.BuildZipFilename(entries[0].GoodsName, len(entries), time.Now())
 	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	c.Header("Content-Disposition", storage.AttachmentDisposition(filename))
 	if err := storage.WriteZip(c.Writer, zipEntries, map[string]string{"manifest.csv": manifest.String()}); err != nil {
 		return
 	}

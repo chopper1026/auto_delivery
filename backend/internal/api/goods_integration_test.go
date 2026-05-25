@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"auto_delivery/backend/internal/security"
@@ -228,6 +229,10 @@ func TestFileDeliveryFullFlowIntegration(t *testing.T) {
 	}
 	if firstDownload.Body.Len() == 0 || !bytes.HasPrefix(firstDownload.Body.Bytes(), []byte("PK")) {
 		t.Fatalf("first download is not a zip, len = %d", firstDownload.Body.Len())
+	}
+	disposition := firstDownload.Header().Get("Content-Disposition")
+	if !strings.Contains(disposition, "filename*=UTF-8''CPA_%E6%96%87%E4%BB%B6%E5%8C%85-2-") {
+		t.Fatalf("first download Content-Disposition = %q", disposition)
 	}
 
 	secondDownload := performRequest(t, app, httptest.NewRequest(http.MethodGet, "/api/download/"+redeemed.ReceiptToken, nil))

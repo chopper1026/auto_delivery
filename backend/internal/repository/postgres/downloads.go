@@ -37,13 +37,14 @@ func (r *DownloadsRepository) GetReceipt(ctx context.Context, receiptHash string
 
 func (r *DownloadsRepository) ClaimDownload(ctx context.Context, receiptHash string, claimHash string, claimExpiresAt time.Time, ip string, ua string) (domain.DownloadClaim, error) {
 	var redemptionID, state, zipPath, goodsName string
-	var count int
+	var count, fileQuantity int
 	err := r.db.QueryRow(ctx, `
-		SELECT r.id::text, r.download_state::text, r.download_count, COALESCE(r.zip_path, ''), g.name
+		SELECT r.id::text, r.download_state::text, r.download_count, COALESCE(r.zip_path, ''), g.name, c.file_quantity
 		FROM redemptions r
 		JOIN goods g ON g.id = r.goods_id
+		JOIN card_keys c ON c.id = r.card_key_id
 		WHERE r.receipt_token_hash = $1
-	`, receiptHash).Scan(&redemptionID, &state, &count, &zipPath, &goodsName)
+	`, receiptHash).Scan(&redemptionID, &state, &count, &zipPath, &goodsName, &fileQuantity)
 	if err != nil {
 		_, _ = r.db.Exec(ctx, `
 			INSERT INTO download_logs (receipt_token_hash, ip_address, user_agent, result)
@@ -89,6 +90,7 @@ func (r *DownloadsRepository) ClaimDownload(ctx context.Context, receiptHash str
 		RedemptionID: redemptionID,
 		ZipPath:      zipPath,
 		GoodsName:    goodsName,
+		FileQuantity: fileQuantity,
 	}, nil
 }
 

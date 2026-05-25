@@ -7,11 +7,13 @@ import (
 	"errors"
 	"io"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -58,6 +60,32 @@ func SanitizeEntryName(name string) string {
 		return "file"
 	}
 	return base
+}
+
+func BuildZipFilename(goodsName string, fileCount int, at time.Time) string {
+	if fileCount < 0 {
+		fileCount = 0
+	}
+	return SanitizeEntryName(goodsName) + "-" + strconv.Itoa(fileCount) + "-" + at.Format("200601021504") + ".zip"
+}
+
+func AttachmentDisposition(filename string) string {
+	name := SanitizeEntryName(filename)
+	return `attachment; filename="` + asciiFilenameFallback(name) + `"; filename*=UTF-8''` + url.PathEscape(name)
+}
+
+func asciiFilenameFallback(filename string) string {
+	var b strings.Builder
+	for _, r := range filename {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	value := strings.Trim(b.String(), "._-")
+	if value == "" {
+		return "download.zip"
+	}
+	return value
 }
 
 func IsAllowedInventoryFile(name string, mimeType string) bool {

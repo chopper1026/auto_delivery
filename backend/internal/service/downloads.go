@@ -31,6 +31,7 @@ func (s *DownloadsService) GetReceipt(ctx context.Context, receiptToken string) 
 }
 
 func (s *DownloadsService) ClaimDownload(ctx context.Context, receiptToken string, ip string, ua string) (domain.DownloadClaim, error) {
+	now := time.Now()
 	claimToken, err := security.RandomToken()
 	if err != nil {
 		return domain.DownloadClaim{}, err
@@ -39,7 +40,7 @@ func (s *DownloadsService) ClaimDownload(ctx context.Context, receiptToken strin
 		ctx,
 		security.LookupHash(receiptToken, s.secretPepper),
 		security.LookupHash(claimToken, s.secretPepper),
-		time.Now().Add(s.claimTTL),
+		now.Add(s.claimTTL),
 		ip,
 		ua,
 	)
@@ -47,7 +48,7 @@ func (s *DownloadsService) ClaimDownload(ctx context.Context, receiptToken strin
 		return domain.DownloadClaim{}, err
 	}
 	claim.ClaimToken = claimToken
-	claim.Filename = storage.SanitizeEntryName(claim.GoodsName) + ".zip"
+	claim.Filename = storage.BuildZipFilename(claim.GoodsName, claim.FileQuantity, now)
 	return claim, nil
 }
 
