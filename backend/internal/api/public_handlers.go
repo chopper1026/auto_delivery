@@ -13,7 +13,10 @@ import (
 	"auto_delivery/backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
+
+const downloadClaimWriteTimeout = 5 * time.Second
 
 type redeemRequest struct {
 	CardKey string `json:"cardKey"`
@@ -79,14 +82,14 @@ func (a *App) handleDownload(c *gin.Context) {
 	}
 	file, err := os.Open(claim.zipPath)
 	if err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
+		a.releaseDownloadClaimDurably(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		jsonError(c, http.StatusInternalServerError, "download file is missing")
 		return
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
+		a.releaseDownloadClaimDurably(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		jsonError(c, http.StatusInternalServerError, "download file is missing")
 		return
 	}
@@ -94,10 +97,10 @@ func (a *App) handleDownload(c *gin.Context) {
 	c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
 	c.Header("Content-Disposition", storage.AttachmentDisposition(claim.filename))
 	if _, err := io.Copy(c.Writer, file); err != nil {
-		_ = a.releaseDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
+		a.releaseDownloadClaimDurably(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 		return
 	}
-	_ = a.completeDownloadClaim(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
+	a.completeDownloadClaimDurably(c.Request.Context(), claim.redemptionID, claim.claimToken, a.clientIP(c), userAgent(c))
 }
 
 type redeemResult struct {
@@ -162,4 +165,27 @@ func (a *App) releaseDownloadClaim(ctx context.Context, redemptionID string, cla
 		return errors.New("downloads service is unavailable")
 	}
 	return a.downloads.ReleaseDownloadClaim(ctx, redemptionID, claimToken, ip, ua)
+}
+
+func (a *App) completeDownloadClaimDurably(requestCtx context.Context, redemptionID string, claimToken string, ip string, ua string) {
+	ctx, cancel := downloadClaimWriteContext(requestCtx)
+	defer cancel()
+	if err := a.completeDownloadClaim(ctx, redemptionID, claimToken, ip, ua); err != nil {
+		log.Error().Err(err).Str("redemption_id", redemptionID).Msg("failed to complete download claim")
+	}
+}
+
+func (a *App) releaseDownloadClaimDurably(requestCtx context.Context, redemptionID string, claimToken string, ip string, ua string) {
+	ctx, cancel := downloadClaimWriteContext(requestCtx)
+	defer cancel()
+	if err := a.releaseDownloadClaim(ctx, redemptionID, claimToken, ip, ua); err != nil {
+		log.Error().Err(err).Str("redemption_id", redemptionID).Msg("failed to release download claim")
+	}
+}
+
+func downloadClaimWriteContext(requestCtx context.Context) (context.Context, context.CancelFunc) {
+	if requestCtx == nil {
+		return context.WithTimeout(context.Background(), downloadClaimWriteTimeout)
+	}
+	return context.WithTimeout(context.WithoutCancel(requestCtx), downloadClaimWriteTimeout)
 }

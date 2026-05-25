@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -19,5 +20,22 @@ func TestExpiredDownloadClaimIsReusable(t *testing.T) {
 	}
 	if claimIsReusable("DOWNLOADED", now.Add(-time.Minute), now) {
 		t.Fatal("DOWNLOADED claim must not be reusable")
+	}
+}
+
+func TestDownloadClaimWriteContextOutlivesRequestCancellation(t *testing.T) {
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+
+	ctx, cleanup := downloadClaimWriteContext(requestCtx)
+	defer cleanup()
+
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("download claim write context error = %v, want nil", err)
+	}
+	select {
+	case <-ctx.Done():
+		t.Fatal("download claim write context should not be canceled with request context")
+	default:
 	}
 }
