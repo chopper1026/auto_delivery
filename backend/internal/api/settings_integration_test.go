@@ -23,7 +23,7 @@ func TestSettingsValidationIntegration(t *testing.T) {
 	invalidPayload = decodeResponse[struct {
 		Error string `json:"error"`
 	}](t, invalid)
-	if invalidPayload.Error != "service address must use http or https" {
+	if invalidPayload.Error != "服务地址必须使用 http 或 https。" {
 		t.Fatalf("invalid settings error = %q", invalidPayload.Error)
 	}
 

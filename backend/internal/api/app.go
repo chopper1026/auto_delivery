@@ -98,7 +98,7 @@ func (a *App) mountStatic(router *gin.Engine) {
 	}
 	router.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			c.JSON(http.StatusNotFound, jsonErrorPayload(http.StatusNotFound, "not found"))
 			return
 		}
 		requestPath := filepath.Clean(strings.TrimPrefix(c.Request.URL.Path, "/"))
@@ -187,21 +187,21 @@ func (a *App) requireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie(a.cfg.SessionCookieName)
 		if err != nil || token == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, jsonErrorPayload(http.StatusUnauthorized, "unauthorized"))
 			return
 		}
 		if a.admin == nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, jsonErrorPayload(http.StatusUnauthorized, "unauthorized"))
 			return
 		}
 		validateCSRF := c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions
 		admin, err := a.admin.AuthenticateSession(c.Request.Context(), token, c.GetHeader("X-CSRF-Token"), validateCSRF)
 		if err != nil {
 			if errors.Is(err, service.ErrInvalidCSRFToken) {
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "invalid csrf token"})
+				c.AbortWithStatusJSON(http.StatusForbidden, jsonErrorPayload(http.StatusForbidden, "invalid csrf token"))
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, jsonErrorPayload(http.StatusUnauthorized, "unauthorized"))
 			return
 		}
 		c.Set("admin", admin)
@@ -215,7 +215,11 @@ func currentAdmin(c *gin.Context) adminContext {
 }
 
 func jsonError(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{"error": message})
+	c.JSON(status, jsonErrorPayload(status, message))
+}
+
+func jsonErrorPayload(status int, message string) gin.H {
+	return gin.H{"error": localizedErrorMessage(status, message)}
 }
 
 func parsePositiveInt(value string, fallback int, max int) int {

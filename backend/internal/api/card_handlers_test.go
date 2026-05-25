@@ -75,7 +75,7 @@ func TestWriteGenerateCardKeyErrorDoesNotExposeInternalError(t *testing.T) {
 	if strings.Contains(recorder.Body.String(), "internal database detail") {
 		t.Fatalf("response leaked internal error: %s", recorder.Body.String())
 	}
-	if !strings.Contains(recorder.Body.String(), "failed to generate card key") {
+	if !strings.Contains(recorder.Body.String(), "生成卡密失败，请稍后重试。") {
 		t.Fatalf("response = %s, want generic generate failure", recorder.Body.String())
 	}
 }
