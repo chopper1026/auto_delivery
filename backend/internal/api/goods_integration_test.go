@@ -1,17 +1,23 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"auto_delivery/backend/internal/domain"
 	"auto_delivery/backend/internal/security"
 	"auto_delivery/backend/internal/testutil"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestParseGoodsListParams(t *testing.T) {
@@ -51,6 +57,126 @@ func TestGoodsExportAuditAction(t *testing.T) {
 	}
 	if got := goodsExportAuditAction("REDEEMED"); got != "goods.export_redeemed" {
 		t.Fatalf("REDEEMED action = %q", got)
+	}
+}
+
+func TestGoodsFileExportZipEntryNameGroupsRedeemedByCardKeySuffix(t *testing.T) {
+	entry := domain.GoodsFileExportEntry{OriginalName: "first.json", CardKeyMask: "AD-****-****-****-A1B2"}
+	if got := goodsFileExportZipEntryName("REDEEMED", entry); got != "A1B2/first.json" {
+		t.Fatalf("redeemed entry name = %q", got)
+	}
+	if got := goodsFileExportZipEntryName("UNREDEEMED", entry); got != "first.json" {
+		t.Fatalf("unredeemed entry name = %q", got)
+	}
+	entry.CardKeyMask = ""
+	if got := goodsFileExportZipEntryName("REDEEMED", entry); got != "unknown/first.json" {
+		t.Fatalf("unknown card mask entry name = %q", got)
+	}
+}
+
+func TestRedeemedGoodsExportGroupsFilesByCardKeySuffixIntegration(t *testing.T) {
+	pool := testutil.OpenTestDB(t)
+	defer pool.Close()
+	app := newIntegrationApp(t, pool)
+	cookie, _ := loginIntegrationAdmin(t, app)
+
+	var goodsID string
+	if err := pool.QueryRow(t.Context(), `
+		INSERT INTO goods (name, type, note)
+		VALUES ('分组导出文件包', 'FILE', 'group export')
+		RETURNING id::text
+	`).Scan(&goodsID); err != nil {
+		t.Fatalf("insert goods: %v", err)
+	}
+	cardAID := insertRedeemedExportCard(t, app, pool, goodsID, "AD-****-****-****-A1B2")
+	cardBID := insertRedeemedExportCard(t, app, pool, goodsID, "AD-****-****-****-C3D4")
+	redemptionAID := insertRedeemedExportRedemption(t, app, pool, goodsID, cardAID, "receipt-a")
+	redemptionBID := insertRedeemedExportRedemption(t, app, pool, goodsID, cardBID, "receipt-b")
+	insertRedeemedExportFile(t, pool, app.cfg.StorageRoot, goodsID, redemptionAID, "a-one.json", `{"account":"a1"}`)
+	insertRedeemedExportFile(t, pool, app.cfg.StorageRoot, goodsID, redemptionAID, "a-two.json", `{"account":"a2"}`)
+	insertRedeemedExportFile(t, pool, app.cfg.StorageRoot, goodsID, redemptionBID, "b-one.json", `{"account":"b1"}`)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/goods/"+goodsID+"/export/REDEEMED", nil)
+	req.AddCookie(cookie)
+	recorder := performRequest(t, app, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("export status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	reader, err := zip.NewReader(bytes.NewReader(recorder.Body.Bytes()), int64(recorder.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	manifest := ""
+	for _, file := range reader.File {
+		names[file.Name] = true
+		if file.Name == "manifest.csv" {
+			rc, err := file.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(rc)
+			_ = rc.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifest = string(body)
+		}
+	}
+	for _, want := range []string{"A1B2/a-one.json", "A1B2/a-two.json", "C3D4/b-one.json", "manifest.csv"} {
+		if !names[want] {
+			t.Fatalf("zip entries = %#v, missing %q", names, want)
+		}
+	}
+	if names["a-one.json"] || names["a-two.json"] || names["b-one.json"] {
+		t.Fatalf("redeemed export should not include flat file entries: %#v", names)
+	}
+	if !strings.Contains(manifest, "zipEntryName") || !strings.Contains(manifest, "A1B2/a-one.json") || !strings.Contains(manifest, "C3D4/b-one.json") {
+		t.Fatalf("manifest = %q", manifest)
+	}
+}
+
+func insertRedeemedExportCard(t *testing.T, app *App, pool *pgxpool.Pool, goodsID string, mask string) string {
+	t.Helper()
+	var cardID string
+	if err := pool.QueryRow(t.Context(), `
+		INSERT INTO card_keys (key_hash, key_mask, goods_id, goods_type, file_quantity, status, redeemed_at)
+		VALUES ($1, $2, $3, 'FILE', 2, 'REDEEMED', now())
+		RETURNING id::text
+	`, security.LookupHash(mask, app.cfg.SecretPepper), mask, goodsID).Scan(&cardID); err != nil {
+		t.Fatalf("insert card %s: %v", mask, err)
+	}
+	return cardID
+}
+
+func insertRedeemedExportRedemption(t *testing.T, app *App, pool *pgxpool.Pool, goodsID string, cardID string, receiptToken string) string {
+	t.Helper()
+	var redemptionID string
+	if err := pool.QueryRow(t.Context(), `
+		INSERT INTO redemptions (card_key_id, goods_id, receipt_token_hash, receipt_token_mask, ip_address, user_agent)
+		VALUES ($1, $2, $3, $4, '127.0.0.1', 'integration-test')
+		RETURNING id::text
+	`, cardID, goodsID, security.LookupHash(receiptToken, app.cfg.SecretPepper), security.MaskSecret(receiptToken)).Scan(&redemptionID); err != nil {
+		t.Fatalf("insert redemption %s: %v", receiptToken, err)
+	}
+	return redemptionID
+}
+
+func insertRedeemedExportFile(t *testing.T, pool *pgxpool.Pool, storageRoot string, goodsID string, redemptionID string, name string, body string) {
+	t.Helper()
+	dir := filepath.Join(storageRoot, "export-test")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, redemptionID+"-"+name)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `
+		INSERT INTO goods_files (goods_id, original_name, stored_name, storage_path, size_bytes, mime_type, sha256, status, redeemed_by_redemption_id, redeemed_at)
+		VALUES ($1, $2, $2, $3, $4, 'application/json', $5, 'REDEEMED', $6, now())
+	`, goodsID, name, path, len(body), name, redemptionID); err != nil {
+		t.Fatalf("insert goods file %s: %v", name, err)
 	}
 }
 

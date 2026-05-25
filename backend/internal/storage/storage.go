@@ -215,6 +215,49 @@ func WriteZip(w io.Writer, entries []ZipEntry, extra map[string]string) error {
 	return zw.Close()
 }
 
+func WriteZipWithEntryPaths(w io.Writer, entries []ZipEntry, extra map[string]string) error {
+	zw := zip.NewWriter(w)
+	seen := map[string]int{}
+	for _, entry := range entries {
+		if err := addZipFileWithEntryPath(zw, entry, seen); err != nil {
+			_ = zw.Close()
+			return err
+		}
+	}
+	for name, body := range extra {
+		writer, err := zw.Create(SanitizeEntryPath(name))
+		if err != nil {
+			_ = zw.Close()
+			return err
+		}
+		if _, err := writer.Write([]byte(body)); err != nil {
+			_ = zw.Close()
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+func SanitizeEntryPath(name string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(name), "\\", "/")
+	parts := []string{}
+	for _, part := range strings.Split(normalized, "/") {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			continue
+		}
+		parts = append(parts, SanitizeEntryName(part))
+	}
+	if len(parts) == 0 {
+		return "file"
+	}
+	return strings.Join(parts, "/")
+}
+
+func UniqueZipEntryName(name string, seen map[string]int) string {
+	return uniqueZipName(SanitizeEntryPath(name), seen)
+}
+
 func addZipFile(zw *zip.Writer, entry ZipEntry, seen map[string]int) error {
 	src, err := os.Open(entry.Path)
 	if err != nil {
@@ -222,6 +265,21 @@ func addZipFile(zw *zip.Writer, entry ZipEntry, seen map[string]int) error {
 	}
 	defer src.Close()
 	name := uniqueZipName(SanitizeEntryName(entry.EntryName), seen)
+	writer, err := zw.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(writer, src)
+	return err
+}
+
+func addZipFileWithEntryPath(zw *zip.Writer, entry ZipEntry, seen map[string]int) error {
+	src, err := os.Open(entry.Path)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	name := UniqueZipEntryName(entry.EntryName, seen)
 	writer, err := zw.Create(name)
 	if err != nil {
 		return err

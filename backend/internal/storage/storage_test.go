@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"archive/zip"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +41,40 @@ func TestAttachmentDispositionIncludesUTF8Filename(t *testing.T) {
 	}
 	if !strings.Contains(got, "filename*=UTF-8''CPA_%E6%96%87%E4%BB%B6%E5%8C%85-2-202605251530.zip") {
 		t.Fatalf("AttachmentDisposition() utf8 filename = %q", got)
+	}
+}
+
+func TestWriteZipWithEntryPathsPreservesSafeFolders(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.json")
+	second := filepath.Join(dir, "second.json")
+	if err := os.WriteFile(first, []byte(`{"account":"first"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte(`{"account":"second"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	err := WriteZipWithEntryPaths(&buf, []ZipEntry{
+		{Path: first, EntryName: "A1B2/first.json"},
+		{Path: second, EntryName: "A1B2/first.json"},
+	}, map[string]string{"manifest.csv": "ok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, file := range reader.File {
+		names[file.Name] = true
+	}
+	for _, want := range []string{"A1B2/first.json", "A1B2/first-2.json", "manifest.csv"} {
+		if !names[want] {
+			t.Fatalf("zip entries = %#v, missing %q", names, want)
+		}
 	}
 }
 

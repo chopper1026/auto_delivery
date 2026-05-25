@@ -217,17 +217,23 @@ func (a *App) handleExportGoodsFiles(c *gin.Context) {
 	}
 	var manifest bytes.Buffer
 	csvWriter := csv.NewWriter(&manifest)
-	_ = csvWriter.Write([]string{"originalName", "status", "cardKeyMask", "reservedAt", "redeemedAt"})
+	_ = csvWriter.Write([]string{"originalName", "status", "cardKeyMask", "reservedAt", "redeemedAt", "zipEntryName"})
 	zipEntries := make([]storage.ZipEntry, 0, len(entries))
+	seenZipNames := map[string]int{}
 	for _, item := range entries {
-		_ = csvWriter.Write([]string{item.OriginalName, item.Status, item.CardKeyMask, formatOptionalTime(item.ReservedAt), formatOptionalTime(item.RedeemedAt)})
-		zipEntries = append(zipEntries, storage.ZipEntry{Path: item.StoragePath, EntryName: item.OriginalName})
+		entryName := storage.UniqueZipEntryName(goodsFileExportZipEntryName(scope, item), seenZipNames)
+		_ = csvWriter.Write([]string{item.OriginalName, item.Status, item.CardKeyMask, formatOptionalTime(item.ReservedAt), formatOptionalTime(item.RedeemedAt), entryName})
+		zipEntries = append(zipEntries, storage.ZipEntry{Path: item.StoragePath, EntryName: entryName})
 	}
 	csvWriter.Flush()
 	filename := storage.BuildZipFilename(entries[0].GoodsName, len(entries), time.Now())
 	c.Header("Content-Type", "application/zip")
 	c.Header("Content-Disposition", storage.AttachmentDisposition(filename))
-	if err := storage.WriteZip(c.Writer, zipEntries, map[string]string{"manifest.csv": manifest.String()}); err != nil {
+	writeZip := storage.WriteZip
+	if scope == "REDEEMED" {
+		writeZip = storage.WriteZipWithEntryPaths
+	}
+	if err := writeZip(c.Writer, zipEntries, map[string]string{"manifest.csv": manifest.String()}); err != nil {
 		return
 	}
 	a.writeAudit(c.Request.Context(), admin.ID, goodsExportAuditAction(scope), "Goods", c.Param("id"), a.clientIP(c), userAgent(c), fmt.Sprintf(`{"count":%d}`, len(entries)))
@@ -270,6 +276,29 @@ func goodsExportAuditAction(scope string) string {
 		return "goods.export_redeemed"
 	}
 	return "goods.export_unredeemed"
+}
+
+func goodsFileExportZipEntryName(scope string, item domain.GoodsFileExportEntry) string {
+	if strings.ToUpper(scope) != "REDEEMED" {
+		return item.OriginalName
+	}
+	return cardKeySuffixFolder(item.CardKeyMask) + "/" + item.OriginalName
+}
+
+func cardKeySuffixFolder(mask string) string {
+	chars := []rune{}
+	for _, r := range strings.TrimSpace(mask) {
+		if (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+			chars = append(chars, r)
+		}
+	}
+	if len(chars) == 0 {
+		return "unknown"
+	}
+	if len(chars) > 4 {
+		chars = chars[len(chars)-4:]
+	}
+	return storage.SanitizeEntryName(strings.ToUpper(string(chars)))
 }
 
 func (a *App) listCardGoodsOptions(ctx context.Context, query string, limit int) ([]Goods, error) {
